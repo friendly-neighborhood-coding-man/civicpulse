@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #f6f4ef;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f0ede6;
+  --color-ink: #15191d;
+  --color-ink-soft: #3b4249;
+  --color-muted: #626b74;
+  --color-line: #e2ddd2;
+  --color-line-strong: #cfc8b9;
+  --color-accent: #0e6f5f;
+  --color-accent-strong: #0a574b;
+  --color-accent-soft: #e2f1ec;
+  --color-warn: #92540f;
+  --color-warn-soft: #fbeedd;
+  --color-danger: #9d2a2f;
+  --color-danger-soft: #fbe9e9;
+  --color-info: #24507a;
+  --color-info-soft: #e6eef6;
+
+  --font-sans:
+    "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --radius-card: 1.25rem;
+  --shadow-card: 0 1px 2px rgba(21, 25, 29, 0.04), 0 12px 32px -24px rgba(21, 25, 29, 0.35);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: #c8e8df;
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+@layer components {
+  .container-page {
+    width: 100%;
+    max-width: 72rem;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+
+  @media (min-width: 768px) {
+    .container-page {
+      padding-inline: 2rem;
+    }
+  }
+
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .label-caps {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+}
