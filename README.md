@@ -29,9 +29,9 @@ CivicPulse aims to reduce that friction while distinguishing citizen claims, off
 5. Track *user-reported*, *officially confirmed* and *unverified* status separately.
 6. When an applicable waiting period has passed **and substantive new evidence exists**, prepare a reviewable follow-up; never auto-send.
 
-## Current implementation (stage 02 — report creation)
+## Current implementation (stage 03 — privacy and publication)
 
-Working today on `stack/02-report-creation`:
+Working today on `stack/03-privacy`:
 
 - responsive Next.js 16 shell with an honest description of scope and safety boundaries;
 - demo identity switching (signed httpOnly cookie) with seeded citizen/moderator identities;
@@ -42,13 +42,24 @@ Working today on `stack/02-report-creation`:
 - server-side image intake with sharp: real format detection, size/pixel limits,
   animated-image rejection, EXIF orientation applied and metadata stripped from the
   working copy; originals stay private and are never served over HTTP;
+- **manual privacy review before publication**: rectangles drawn on the real photo
+  (solid/blur/pixelate), a server-rendered preview of the exact image that would be
+  published, two explicit acknowledgements plus a separate “nothing sensitive” one when
+  no masks exist;
+- publication of a **re-encoded, metadata-free redacted copy** only, with an audit trail
+  of masks and consent; originals/working copies stay private;
+- an anonymous public issue page (`/issues/[publicId]`) that exposes only a narrow
+  projection: no owner, no coordinates, no original description;
 - owner-only access to drafts and photos (other users get a 404, not a 403);
 - JSON API conventions: zod validation, same-origin mutation guard, safe error envelope,
   in-process rate limiting;
-- Vitest suite (58 tests) over real SQLite and sharp, plus Playwright tests (7) in real Chromium.
+- Vitest suite (80 tests) over real SQLite, sharp and redaction pixels, plus Playwright
+  tests (10) in real Chromium.
 
-Not implemented yet: automatic face/plate redaction, publication, community support and
-follow-ups. The UI marks these as upcoming rather than simulating them.
+Not implemented yet: verified automatic face/plate detection, community support and
+additional evidence, status timelines, and follow-ups. The UI marks these as upcoming
+rather than simulating them. Redaction is manual and labelled as such; the optional
+browser face detector is experimental and unavailable in headless Chromium.
 
 ### Local development
 

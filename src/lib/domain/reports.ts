@@ -34,6 +34,9 @@ export type ReportRow = {
   suggested_steps: string;
   channel_id: string | null;
   channel_checked_at: string | null;
+  published_at: string | null;
+  privacy_reviewed_at: string | null;
+  consent_version: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -69,6 +72,7 @@ export type OwnerReport = {
   state: ReportState;
   createdAt: string;
   updatedAt: string;
+  publishedAt: string | null;
   assistant: { mode: string; generatedAt: string } | null;
   missingEvidence: string[];
   suggestedSteps: string[];
@@ -107,6 +111,7 @@ export function toOwnerReport(row: ReportRow, media?: MediaRow): OwnerReport {
     areaId: row.area_id,
     areaLabel: row.area_label,
     state: row.state,
+    publishedAt: row.published_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     assistant:
@@ -266,6 +271,18 @@ export function getOwnerReport(
 
 export function getWorkingMedia(db: Db, row: ReportRow): MediaRow | undefined {
   return mediaFor(db, row.id).working;
+}
+
+export function getMediaByRole(
+  db: Db,
+  reportId: string,
+  role: MediaRow["role"],
+): MediaRow | undefined {
+  return one<MediaRow>(
+    db,
+    "SELECT * FROM report_media WHERE report_id = ? AND role = ?",
+    [reportId, role],
+  );
 }
 
 export function listOwnerReports(db: Db, actor: PublicUser): OwnerReport[] {
