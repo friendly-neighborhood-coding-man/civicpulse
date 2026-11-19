@@ -1,7 +1,10 @@
+import Link from "next/link";
+
 import IdentitySwitcher from "@/components/IdentitySwitcher";
 import { getSessionUser } from "@/lib/auth/session";
 import { getAssistantMode } from "@/lib/config";
 import { getDb, getSchemaVersion } from "@/lib/db/connection";
+import { listOwnerReports } from "@/lib/domain/reports";
 import { listUsers } from "@/lib/domain/users";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +14,7 @@ const STEPS = [
     step: "01",
     title: "기록",
     body: "사진, 대략적인 위치, 짧은 설명으로 제보 초안을 만듭니다. 초안은 편집 가능하고, 위치는 공개 범위를 따로 정합니다.",
-    status: "다음 단계",
+    status: "사용 가능",
   },
   {
     step: "02",
@@ -56,6 +59,7 @@ export default async function HomePage() {
   const users = listUsers(db);
   const schemaVersion = getSchemaVersion(db);
   const assistantMode = getAssistantMode();
+  const myReports = user ? listOwnerReports(db, user).slice(0, 2) : [];
 
   return (
     <>
@@ -73,12 +77,21 @@ export default async function HomePage() {
           </p>
 
           <div className="mt-7 flex flex-wrap items-center gap-3">
-            <a
-              href="#identity"
-              className="inline-flex h-11 items-center rounded-full bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-strong"
-            >
-              데모 사용자로 시작하기
-            </a>
+            {user ? (
+              <Link
+                href="/reports/new"
+                className="inline-flex h-11 items-center rounded-full bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-strong"
+              >
+                새 제보 시작하기
+              </Link>
+            ) : (
+              <a
+                href="#identity"
+                className="inline-flex h-11 items-center rounded-full bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-strong"
+              >
+                데모 사용자로 시작하기
+              </a>
+            )}
             <a
               href="#limits"
               className="inline-flex h-11 items-center rounded-full border border-line bg-surface px-5 text-sm font-semibold text-ink transition hover:border-line-strong"
@@ -127,10 +140,41 @@ export default async function HomePage() {
           </div>
 
           {user ? (
-            <p className="mt-5 rounded-xl border border-line bg-surface-muted px-3 py-2 text-xs text-ink-soft">
-              현재 세션: <strong className="font-semibold">{user.displayName}</strong>{" "}
-              (@{user.handle})
-            </p>
+            <div className="mt-5 space-y-3">
+              <p className="rounded-xl border border-line bg-surface-muted px-3 py-2 text-xs text-ink-soft">
+                현재 세션: <strong className="font-semibold">{user.displayName}</strong>{" "}
+                (@{user.handle})
+              </p>
+              <div className="rounded-xl border border-line px-3 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-ink">최근 초안</p>
+                  <Link
+                    href="/reports"
+                    className="text-[11px] font-medium text-muted underline underline-offset-4 hover:text-ink"
+                  >
+                    전체 보기
+                  </Link>
+                </div>
+                {myReports.length === 0 ? (
+                  <p className="mt-2 text-[11px] text-muted">
+                    아직 없습니다. 샘플 사진으로 시작할 수 있습니다.
+                  </p>
+                ) : (
+                  <ul className="mt-2 space-y-1.5">
+                    {myReports.map((report) => (
+                      <li key={report.publicId}>
+                        <Link
+                          href={`/reports/${report.publicId}`}
+                          className="line-clamp-1 text-[11px] text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+                        >
+                          비공개 초안 · {report.title || report.areaLabel}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
           ) : null}
         </div>
       </section>
