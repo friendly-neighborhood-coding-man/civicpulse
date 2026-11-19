@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
+import type { PublicTextReview } from "@/lib/domain/publication";
 import {
   MAX_MASKS,
   MODE_LABEL,
@@ -12,12 +13,15 @@ import {
   type MaskMode,
   type MaskRect,
 } from "@/lib/privacy/masks";
+import { TEXT_FINDING_LABEL } from "@/lib/privacy/text";
 
 type Props = {
   publicId: string;
   photoUrl: string;
   photoWidth: number;
   photoHeight: number;
+  /** Server-computed review of the exact text that will be published. */
+  textReview: PublicTextReview;
 };
 
 type FaceDetectorLike = {
@@ -37,6 +41,7 @@ export default function PrivacyPublishFlow({
   photoUrl,
   photoWidth,
   photoHeight,
+  textReview,
 }: Props) {
   const router = useRouter();
   const frameRef = useRef<HTMLDivElement>(null);
@@ -58,6 +63,14 @@ export default function PrivacyPublishFlow({
     consent: false,
     noSensitiveContent: false,
   });
+  // Text acknowledgements are bound to the exact content the server showed. When
+  // an edit changes the token, these no longer match and the boxes un-check.
+  const [reviewedTextToken, setReviewedTextToken] = useState<string | null>(null);
+  const [reviewedFindingsToken, setReviewedFindingsToken] = useState<string | null>(
+    null,
+  );
+  const textReviewed = reviewedTextToken === textReview.token;
+  const findingsReviewed = reviewedFindingsToken === textReview.token;
 
   const signature = JSON.stringify(masks);
   const previewIsStale = Boolean(previewUrl) && previewSignature !== signature;
@@ -166,7 +179,15 @@ export default function PrivacyPublishFlow({
       const response = await fetch(`/api/reports/${publicId}/publish`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ masks, ack }),
+        body: JSON.stringify({
+          masks,
+          ack: {
+            ...ack,
+            textReviewed,
+            textFindingsReviewed: findingsReviewed,
+            textToken: textReview.token,
+          },
+        }),
       });
       const body = (await response.json().catch(() => null)) as
         | { ok: boolean; error?: { message?: string } }
@@ -188,6 +209,8 @@ export default function PrivacyPublishFlow({
     ack.privacyReviewed &&
     ack.consent &&
     (masks.length > 0 || ack.noSensitiveContent) &&
+    textReviewed &&
+    (textReview.findings.length === 0 || findingsReviewed) &&
     Boolean(previewUrl) &&
     !previewIsStale &&
     !publishing;
@@ -389,6 +412,90 @@ export default function PrivacyPublishFlow({
           />
         </figure>
       ) : null}
+
+      <section
+        aria-labelledby="public-text-heading"
+        className="mt-6 rounded-2xl border border-line bg-surface p-4"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 id="public-text-heading" className="text-sm font-semibold text-ink">
+            공개될 제목과 본문
+          </h3>
+          <span className="rounded-full border border-line bg-surface-muted px-2 py-0.5 text-[10px] text-muted">
+            사진과 별도 검토
+          </span>
+        </div>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted">
+          아래 글이 초안에서 그대로 복사되어 누구나 볼 수 있게 됩니다. 이름·연락처·상세
+          주소가 들어 있지 않은지 직접 읽어 주세요.
+        </p>
+        <div className="mt-3 space-y-2 rounded-xl border border-line bg-surface-muted/60 p-3">
+          <p className="text-sm font-semibold text-ink">
+            {textReview.title || "제목 없음"}
+          </p>
+          <p className="text-xs leading-relaxed whitespace-pre-line text-ink-soft">
+            {textReview.description}
+          </p>
+          <p className="text-[11px] text-muted">위치 표시: 구역 단위</p>
+        </div>
+
+        {textReview.findings.length > 0 ? (
+          <div className="mt-3 rounded-xl border border-warn/30 bg-warn-soft px-3 py-2">
+            <p className="text-[11px] font-semibold text-warn">
+              개인정보로 보일 수 있는 표현 {textReview.findings.length}곳을 찾았습니다.
+            </p>
+            <ul className="mt-2 space-y-1 text-[11px] leading-relaxed text-warn">
+              {textReview.findings.map((finding, index) => (
+                <li key={`${finding.field}-${finding.start}-${index}`}>
+                  {TEXT_FINDING_LABEL[finding.kind]} · {finding.preview} ·{" "}
+                  {finding.field === "title" ? "제목" : "본문"}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[11px] leading-relaxed text-warn">
+              고치려면 위 초안 편집에서 본문을 수정하고 저장한 뒤 다시 확인하세요.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-3 text-[11px] leading-relaxed text-muted">
+            정해진 형식(전화번호·이메일 등)으로 찾을 수 있는 항목은 없었습니다. 발견되지
+            않았다는 것이 개인정보가 없다는 뜻은 아닙니다.
+          </p>
+        )}
+
+        <p className="mt-2 text-[10px] leading-relaxed text-muted">
+          {textReview.limitation}
+        </p>
+
+        <div className="mt-3 space-y-2 text-xs leading-relaxed text-ink-soft">
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={textReviewed}
+              onChange={(event) =>
+                setReviewedTextToken(event.target.checked ? textReview.token : null)
+              }
+              className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+            />
+            공개될 제목과 본문을 직접 읽었습니다.
+          </label>
+          {textReview.findings.length > 0 ? (
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={findingsReviewed}
+                onChange={(event) =>
+                  setReviewedFindingsToken(
+                    event.target.checked ? textReview.token : null,
+                  )
+                }
+                className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+              />
+              표시된 개인정보 의심 항목을 확인했고, 공개해도 되는 내용입니다.
+            </label>
+          ) : null}
+        </div>
+      </section>
 
       <fieldset className="mt-6 rounded-2xl border border-line bg-surface-muted/60 p-4">
         <legend className="sr-only">공개 동의</legend>

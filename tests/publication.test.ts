@@ -13,9 +13,14 @@ import {
   publishReport,
   toPublicReport,
 } from "@/lib/domain/publication";
-import { createDraftReport, getOwnerReport } from "@/lib/domain/reports";
+import {
+  createDraftReport,
+  getOwnerReport,
+  updateDraftReport,
+} from "@/lib/domain/reports";
 import { toPublicUser, type PublicUser } from "@/lib/domain/users";
 import { ApiError } from "@/lib/http/errors";
+import { publicTextReviewToken } from "@/lib/privacy/text";
 import { SQUARE_MASK, makeTestImage } from "./helpers/images";
 
 const dirs: string[] = [];
@@ -62,7 +67,17 @@ async function draft(db: ReturnType<typeof openDatabase>, owner = actor(0)) {
   });
 }
 
-const ACK = { privacyReviewed: true, consent: true, noSensitiveContent: false };
+/** Acknowledgements bound to the exact text of one draft. */
+function ackFor(row: { title: string; description: string }) {
+  return {
+    privacyReviewed: true,
+    consent: true,
+    noSensitiveContent: false,
+    textReviewed: true,
+    textFindingsReviewed: false,
+    textToken: publicTextReviewToken(row),
+  };
+}
 
 afterEach(() => {
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
@@ -74,9 +89,16 @@ describe("publication gate", () => {
     const row = await draft(db);
 
     for (const ack of [
-      { ...ACK, privacyReviewed: false },
-      { ...ACK, consent: false },
-      { privacyReviewed: false, consent: false, noSensitiveContent: false },
+      { ...ackFor(row), privacyReviewed: false },
+      { ...ackFor(row), consent: false },
+      {
+        privacyReviewed: false,
+        consent: false,
+        noSensitiveContent: false,
+        textReviewed: false,
+        textFindingsReviewed: false,
+        textToken: publicTextReviewToken(row),
+      },
     ]) {
       await expect(
         publishReport(db, actor(0), row.public_id, { masks: [SQUARE_MASK], ack }),
@@ -90,12 +112,12 @@ describe("publication gate", () => {
     const { db } = tempDb();
     const row = await draft(db);
     await expect(
-      publishReport(db, actor(0), row.public_id, { masks: [], ack: ACK }),
+      publishReport(db, actor(0), row.public_id, { masks: [], ack: ackFor(row) }),
     ).rejects.toMatchObject({ status: 409 });
 
     const result = await publishReport(db, actor(0), row.public_id, {
       masks: [],
-      ack: { ...ACK, noSensitiveContent: true },
+      ack: { ...ackFor(row), noSensitiveContent: true },
     });
     expect(result.maskCount).toBe(0);
     db.close();
@@ -105,12 +127,12 @@ describe("publication gate", () => {
     const { db } = tempDb();
     const row = await draft(db);
     await expect(
-      publishReport(db, actor(1), row.public_id, { masks: [SQUARE_MASK], ack: ACK }),
+      publishReport(db, actor(1), row.public_id, { masks: [SQUARE_MASK], ack: ackFor(row) }),
     ).rejects.toMatchObject({ status: 404 });
     await expect(
       publishReport(db, actor(0), "cp_'; DROP TABLE reports;--", {
         masks: [SQUARE_MASK],
-        ack: ACK,
+        ack: ackFor(row),
       }),
     ).rejects.toBeInstanceOf(ApiError);
     db.close();
@@ -124,7 +146,7 @@ describe("publication gate", () => {
       db,
       actor(0),
       row.public_id,
-      { masks: [SQUARE_MASK], ack: ACK },
+      { masks: [SQUARE_MASK], ack: ackFor(row) },
       new Date("2026-11-19T05:00:00.000Z"),
     );
 
@@ -168,7 +190,7 @@ describe("publication gate", () => {
 
     // Publishing twice is refused.
     await expect(
-      publishReport(db, actor(0), row.public_id, { masks: [SQUARE_MASK], ack: ACK }),
+      publishReport(db, actor(0), row.public_id, { masks: [SQUARE_MASK], ack: ackFor(row) }),
     ).rejects.toMatchObject({ status: 409 });
 
     // Owner edits are frozen after publication.
@@ -179,7 +201,7 @@ describe("publication gate", () => {
   it("exposes only a narrow public projection", async () => {
     const { db } = tempDb();
     const row = await draft(db);
-    await publishReport(db, actor(0), row.public_id, { masks: [SQUARE_MASK], ack: ACK });
+    await publishReport(db, actor(0), row.public_id, { masks: [SQUARE_MASK], ack: ackFor(row) });
 
     const publicReport = getPublicReport(db, row.public_id);
     expect(publicReport.title).toContain("보도 파손");
@@ -236,7 +258,7 @@ describe("publication gate", () => {
     );
 
     await expect(
-      publishReport(db, actor(0), row.public_id, { masks: [SQUARE_MASK], ack: ACK }),
+      publishReport(db, actor(0), row.public_id, { masks: [SQUARE_MASK], ack: ackFor(row) }),
     ).rejects.toBeInstanceOf(ApiError);
 
     const state = one<{ state: string }>(db, "SELECT state FROM reports WHERE id = ?", [row.id]);
@@ -247,6 +269,111 @@ describe("publication gate", () => {
     // file never existed in the first place.
     const publicFiles = fs.readdirSync(path.join(dir, "media", "public"));
     expect(publicFiles).toHaveLength(0);
+    db.close();
+  });
+});
+
+describe("public text privacy gate", () => {
+  it("refuses to publish until the exact public text is acknowledged", async () => {
+    const { db } = tempDb();
+    const row = await draft(db);
+
+    await expect(
+      publishReport(db, actor(0), row.public_id, {
+        masks: [SQUARE_MASK],
+        ack: { ...ackFor(row), textReviewed: false },
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(getOwnerReport(db, actor(0), row.public_id).state).toBe("draft");
+    db.close();
+  });
+
+  it("requires an explicit decision when synthetic personal information is found", async () => {
+    const { db } = tempDb();
+    const row = await draft(db);
+
+    updateDraftReport(db, actor(0), row.public_id, {
+      title: "010-9876-5432 보도 파손 신고",
+      description:
+        "현황\n연락처 010-9876-5432, 메일 reporter@example.com\n\n위치\n서울 마포구",
+    });
+    const piiDraft = getOwnerReport(db, actor(0), row.public_id);
+
+    let blocked: unknown;
+    try {
+      await publishReport(db, actor(0), row.public_id, {
+        masks: [SQUARE_MASK],
+        ack: ackFor(piiDraft),
+      });
+    } catch (error) {
+      blocked = error;
+    }
+    expect(blocked).toBeInstanceOf(ApiError);
+    const apiError = blocked as ApiError;
+    expect(apiError.status).toBe(409);
+    const details = apiError.details as {
+      textFindings: { total: number; kinds: string[] };
+    };
+    expect(details.textFindings.total).toBeGreaterThanOrEqual(2);
+    expect(details.textFindings.kinds).toEqual(
+      expect.arrayContaining(["phone", "email"]),
+    );
+    expect(getOwnerReport(db, actor(0), row.public_id).state).toBe("draft");
+
+    // The publisher reviewed the candidates and chose to publish anyway.
+    await publishReport(db, actor(0), row.public_id, {
+      masks: [SQUARE_MASK],
+      ack: { ...ackFor(piiDraft), textFindingsReviewed: true },
+    });
+
+    const stored = one<{
+      state: string;
+      text_reviewed_at: string;
+      text_review_version: string;
+      text_findings: string;
+    }>(
+      db,
+      `SELECT state, text_reviewed_at, text_review_version, text_findings
+         FROM reports WHERE id = ?`,
+      [row.id],
+    );
+    expect(stored?.state).toBe("published");
+    expect(stored?.text_review_version).toBe("text-v1");
+    expect(stored?.text_reviewed_at).toBeTruthy();
+
+    // The audit records kinds and counts, never the values it warns about.
+    expect(stored?.text_findings).toContain("phone");
+    expect(stored?.text_findings).toContain("email");
+    expect(stored?.text_findings).not.toContain("9876");
+    expect(stored?.text_findings).not.toContain("reporter@example.com");
+    db.close();
+  });
+
+  it("rejects an acknowledgement bound to stale text after an edit", async () => {
+    const { db } = tempDb();
+    const row = await draft(db);
+    const staleAck = ackFor(row);
+
+    updateDraftReport(db, actor(0), row.public_id, {
+      description:
+        "현황\n수정된 설명입니다. 보도 블록이 더 벌어졌습니다.\n\n위치\n서울 마포구",
+    });
+
+    await expect(
+      publishReport(db, actor(0), row.public_id, {
+        masks: [SQUARE_MASK],
+        ack: staleAck,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(getOwnerReport(db, actor(0), row.public_id).state).toBe("draft");
+
+    // Re-reading the current text produces a token that is accepted.
+    const updated = getOwnerReport(db, actor(0), row.public_id);
+    await publishReport(db, actor(0), row.public_id, {
+      masks: [SQUARE_MASK],
+      ack: ackFor(updated),
+    });
+    expect(getOwnerReport(db, actor(0), row.public_id).state).toBe("published");
     db.close();
   });
 });

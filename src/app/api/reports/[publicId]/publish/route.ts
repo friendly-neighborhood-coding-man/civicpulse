@@ -16,6 +16,11 @@ const publishSchema = z.object({
     privacyReviewed: z.boolean(),
     consent: z.boolean(),
     noSensitiveContent: z.boolean().default(false),
+    // The public page copies the draft text, so it needs its own acknowledgement.
+    textReviewed: z.boolean(),
+    textFindingsReviewed: z.boolean().default(false),
+    // Server-issued token of the text the publisher actually reviewed.
+    textToken: z.string().trim().min(8).max(80),
   }),
 });
 

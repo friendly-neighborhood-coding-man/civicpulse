@@ -3,7 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { KIND_LABEL, STATUS_LABEL, STATUS_VALUES, type StatusValue } from "@/lib/validation/community";
+import {
+  KIND_HINT,
+  KIND_LABEL,
+  STATUS_LABEL,
+  STATUS_VALUES,
+  type StatusValue,
+} from "@/lib/validation/community";
 
 type Props = {
   publicId: string;
@@ -50,6 +56,9 @@ export default function IssueEngagement({
   const [claimNote, setClaimNote] = useState("");
   const [claimMessage, setClaimMessage] = useState<string | null>(null);
 
+  const [officialKind, setOfficialKind] = useState<
+    "official_source" | "moderator_claim"
+  >("official_source");
   const [officialStatus, setOfficialStatus] = useState<StatusValue>("acknowledged");
   const [officialNote, setOfficialNote] = useState("");
   const [officialSource, setOfficialSource] = useState("");
@@ -125,7 +134,7 @@ export default function IssueEngagement({
   }
 
   async function postStatus(input: {
-    kind: "user_claim" | "official";
+    kind: "user_claim" | "official_source" | "moderator_claim";
     status: StatusValue;
     note: string;
     sourceUrl?: string;
@@ -304,14 +313,32 @@ export default function IssueEngagement({
 
       {isModerator ? (
         <section className="rounded-2xl border border-warn/30 bg-warn-soft/40 p-5">
-          <h2 className="text-sm font-semibold text-ink">운영자: 공식 상태 기록</h2>
+          <h2 className="text-sm font-semibold text-ink">운영자: 상태 기록</h2>
           <p className="mt-2 text-xs leading-relaxed text-warn">
-            공식 상태는 출처 주소가 있어야 기록됩니다. 확인한 사실만 입력하고,
-            확인하지 못한 내용은 기록하지 마세요.
+            공식 포털(안전신문고·국민신문고) 주소를 댈 수 있을 때만 &lsquo;공식 출처
+            확인&rsquo;으로 기록합니다. 그 밖의 자료는 &lsquo;운영자 기록(미검증)&rsquo;으로
+            남기며, 공개 화면에서도 미검증으로 표시됩니다. 정부 시스템과 자동으로
+            연동되는 기록은 없습니다.
           </p>
           <div className="mt-3 space-y-3">
             <select
-              aria-label="공식 상태"
+              aria-label="기록 종류"
+              value={officialKind}
+              onChange={(event) =>
+                setOfficialKind(
+                  event.target.value as "official_source" | "moderator_claim",
+                )
+              }
+              className="h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink"
+            >
+              <option value="official_source">공식 출처 확인 · 운영자 입력</option>
+              <option value="moderator_claim">운영자 기록 · 미검증</option>
+            </select>
+            <p className="text-[11px] leading-relaxed text-ink-soft">
+              {KIND_HINT[officialKind]}
+            </p>
+            <select
+              aria-label="기록할 상태"
               value={officialStatus}
               onChange={(event) => setOfficialStatus(event.target.value as StatusValue)}
               className="h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink"
@@ -323,19 +350,23 @@ export default function IssueEngagement({
               ))}
             </select>
             <input
-              aria-label="공식 상태 출처"
+              aria-label="출처 주소"
               value={officialSource}
               onChange={(event) => setOfficialSource(event.target.value)}
-              placeholder="https:// 로 시작하는 출처 주소"
+              placeholder={
+                officialKind === "official_source"
+                  ? "https://www.safetyreport.go.kr/"
+                  : "https:// ... (선택)"
+              }
               className="h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink"
             />
             <textarea
-              aria-label="공식 상태 설명"
+              aria-label="기록 내용"
               value={officialNote}
               onChange={(event) => setOfficialNote(event.target.value)}
               rows={2}
               maxLength={600}
-              placeholder="공식 답변 요지 (5자 이상)"
+              placeholder="확인한 내용 (5자 이상)"
               className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink"
             />
             {officialMessage ? (
@@ -346,12 +377,17 @@ export default function IssueEngagement({
               onClick={() =>
                 void (async () => {
                   const error = await postStatus({
-                    kind: "official",
+                    kind: officialKind,
                     status: officialStatus,
                     note: officialNote,
-                    sourceUrl: officialSource,
+                    sourceUrl: officialSource.trim() || undefined,
                   });
-                  setOfficialMessage(error ?? "공식 상태로 기록했습니다.");
+                  setOfficialMessage(
+                    error ??
+                      (officialKind === "official_source"
+                        ? "공식 출처 기록으로 남겼습니다. 정부 시스템과 자동 연동된 기록은 아닙니다."
+                        : "운영자 기록(미검증)으로 남겼습니다."),
+                  );
                   if (!error) {
                     setOfficialNote("");
                     setOfficialSource("");
@@ -360,7 +396,7 @@ export default function IssueEngagement({
               }
               className="inline-flex h-10 items-center rounded-full bg-ink px-4 text-sm font-semibold text-white transition hover:opacity-90"
             >
-              공식 상태 기록
+              상태 기록
             </button>
           </div>
         </section>

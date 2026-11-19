@@ -18,6 +18,7 @@ import { publishReport } from "@/lib/domain/publication";
 import { createDraftReport } from "@/lib/domain/reports";
 import { toPublicUser, type PublicUser } from "@/lib/domain/users";
 import { ApiError } from "@/lib/http/errors";
+import { publicTextReviewToken } from "@/lib/privacy/text";
 import { SQUARE_MASK, makeTestImage } from "./helpers/images";
 
 const dirs: string[] = [];
@@ -44,7 +45,16 @@ const OWNER = actor(0);
 const NEIGHBOUR = actor(1);
 const MODERATOR = actor(3);
 
-const ACK = { privacyReviewed: true, consent: true, noSensitiveContent: false };
+function ackFor(row: { title: string; description: string }) {
+  return {
+    privacyReviewed: true,
+    consent: true,
+    noSensitiveContent: false,
+    textReviewed: true,
+    textFindingsReviewed: false,
+    textToken: publicTextReviewToken(row),
+  };
+}
 
 async function publishedReport(
   db: ReturnType<typeof openDatabase>,
@@ -71,7 +81,7 @@ async function publishedReport(
     },
     image,
   });
-  await publishReport(db, owner, row.public_id, { masks: [SQUARE_MASK], ack: ACK });
+  await publishReport(db, owner, row.public_id, { masks: [SQUARE_MASK], ack: ackFor(row) });
   return row;
 }
 
@@ -223,7 +233,7 @@ describe("status events", () => {
       MODERATOR,
       row.public_id,
       {
-        kind: "official",
+        kind: "official_source",
         status: "in_progress",
         note: "구청에서 보수 일정을 안내했습니다.",
         sourceUrl: "https://www.safetyreport.go.kr/",
@@ -236,7 +246,10 @@ describe("status events", () => {
     expect(detail.officialCheckedAt).toBe("2026-11-19T06:00:00.000Z");
     // The citizen claim is still visible and still labelled separately.
     expect(detail.latestUserClaim?.status).toBe("unresolved");
-    expect(detail.events.map((event) => event.kind)).toEqual(["user_claim", "official"]);
+    expect(detail.events.map((event) => event.kind)).toEqual([
+      "user_claim",
+      "official_source",
+    ]);
     db.close();
   });
 
@@ -253,8 +266,8 @@ describe("status events", () => {
       }),
     ).toThrow(ApiError);
 
-    // Only moderators may add official or mock statuses.
-    for (const kind of ["official", "mock"] as const) {
+    // Only moderators may add sourced or mock statuses.
+    for (const kind of ["official_source", "moderator_claim", "mock"] as const) {
       expect(() =>
         addStatusEvent(db, OWNER, row.public_id, {
           kind,
@@ -265,11 +278,15 @@ describe("status events", () => {
       ).toThrow(ApiError);
     }
 
-    // Official status requires an https source.
-    for (const sourceUrl of [undefined, "http://www.safetyreport.go.kr/"]) {
+    // An official-source status requires an https source on a registered portal.
+    for (const sourceUrl of [
+      undefined,
+      "http://www.safetyreport.go.kr/",
+      "https://example.com/notice/1",
+    ]) {
       expect(() =>
         addStatusEvent(db, MODERATOR, row.public_id, {
-          kind: "official",
+          kind: "official_source",
           status: "resolved",
           note: "출처가 없거나 안전하지 않은 주소로 기록하는 시도입니다.",
           sourceUrl,
@@ -286,7 +303,7 @@ describe("public aggregation", () => {
     const row = await publishedReport(db);
     supportIssue(db, NEIGHBOUR, row.public_id);
     addStatusEvent(db, MODERATOR, row.public_id, {
-      kind: "official",
+      kind: "official_source",
       status: "acknowledged",
       note: "접수 확인을 받았습니다.",
       sourceUrl: "https://www.epeople.go.kr/",
@@ -313,6 +330,86 @@ describe("public aggregation", () => {
     expect(serialized).not.toContain(row.user_description);
     expect(serialized).not.toContain("37.56");
     expect(serialized).not.toContain(".webp");
+    db.close();
+  });
+});
+
+describe("official-looking sources", () => {
+  it("never turns an unrelated https URL into an official status", async () => {
+    const { db } = tempDb();
+    const row = await publishedReport(db);
+
+    // The moderator may keep the link, but only as an unverified note.
+    const note = addStatusEvent(db, MODERATOR, row.public_id, {
+      kind: "moderator_claim",
+      status: "resolved",
+      note: "담당 부서와 통화했다고 전달받았습니다. 서면 확인은 없습니다.",
+      sourceUrl: "https://example.com/notice/1",
+    });
+    expect(note.kind).toBe("moderator_claim");
+    expect(note.source_host).toBe("example.com");
+    expect(note.source_checked_at).toBeNull();
+
+    let detail = getIssueDetail(db, row.public_id, null);
+    expect(detail.officialStatus).toBeNull();
+    expect(detail.latestModeratorClaim?.status).toBe("resolved");
+    expect(detail.events.map((event) => event.kind)).toEqual(["moderator_claim"]);
+
+    // Claiming any of these as an official source is refused outright.
+    for (const sourceUrl of [
+      "https://example.com/notice/1",
+      "https://www.safetyreport.go.kr.evil.example/",
+      "https://www.safetyreport.go.kr@evil.example/",
+      "https://evil.example/?ref=safetyreport.go.kr",
+    ]) {
+      expect(() =>
+        addStatusEvent(db, MODERATOR, row.public_id, {
+          kind: "official_source",
+          status: "resolved",
+          note: "공식 출처로 기록하려는 시도입니다.",
+          sourceUrl,
+        }),
+      ).toThrow(ApiError);
+    }
+
+    // A registered portal host becomes an official source with its as-of date.
+    const official = addStatusEvent(db, MODERATOR, row.public_id, {
+      kind: "official_source",
+      status: "acknowledged",
+      note: "안전신문고 접수 확인 화면을 확인했습니다.",
+      sourceUrl: "https://www.safetyreport.go.kr/",
+    });
+    expect(official.source_host).toBe("www.safetyreport.go.kr");
+    expect(official.source_checked_at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    detail = getIssueDetail(db, row.public_id, null);
+    expect(detail.officialStatus).toBe("acknowledged");
+    expect(detail.officialSourceHost).toBe("www.safetyreport.go.kr");
+    // The unverified note remains visible and separate.
+    expect(detail.latestModeratorClaim?.status).toBe("resolved");
+    db.close();
+  });
+
+  it("refuses evidence notes that contain synthetic personal information", async () => {
+    const { db } = tempDb();
+    const row = await publishedReport(db);
+    const image = await makeTestImage();
+
+    await expect(
+      addEvidence(db, NEIGHBOUR, row.public_id, {
+        note: "연락처 010-9876-5432 로 연락 주세요.",
+        ackNoSensitive: true,
+        image,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(listEvidenceQueue(db)).toHaveLength(0);
+
+    const accepted = await addEvidence(db, NEIGHBOUR, row.public_id, {
+      note: "오늘 아침에도 같은 자리가 그대로였습니다.",
+      ackNoSensitive: true,
+      image,
+    });
+    expect(accepted.status).toBe("pending");
     db.close();
   });
 });

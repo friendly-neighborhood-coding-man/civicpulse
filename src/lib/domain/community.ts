@@ -1,7 +1,13 @@
 import type { Db } from "../db/connection.ts";
 import { all, one, run } from "../db/query.ts";
+import {
+  OFFICIAL_SOURCE_REJECTION_MESSAGE,
+  checkOfficialSourceUrl,
+  parseSupportingSourceUrl,
+} from "./official-sources.ts";
 import { badRequest, conflict, forbidden, notFound } from "../http/errors.ts";
 import { internalId } from "../ids.ts";
+import { scanText, TEXT_FINDING_LABEL } from "../privacy/text.ts";
 import type { ProcessedImage } from "../services/image.ts";
 import { newMediaKey, writeMedia } from "../services/media-store.ts";
 import type {
@@ -40,6 +46,10 @@ export type StatusEventRow = {
   status: StatusValue;
   note: string;
   source_url: string | null;
+  /** Host the source link actually points at, never a display label. */
+  source_host: string | null;
+  /** Registry as-of date for a verified portal citation. */
+  source_checked_at: string | null;
   created_by: string;
   created_at: string;
 };
@@ -48,7 +58,10 @@ export type PublicEvidence = {
   id: string;
   note: string;
   photoUrl: string;
+  /** When the sighter uploaded it (moderation had not happened yet). */
   createdAt: string;
+  /** When a moderator approved it; null only if the row is not approved. */
+  approvedAt: string | null;
 };
 
 export type PublicStatusEvent = {
@@ -57,6 +70,8 @@ export type PublicStatusEvent = {
   status: StatusValue;
   note: string;
   sourceUrl: string | null;
+  sourceHost: string | null;
+  sourceCheckedAt: string | null;
   createdAt: string;
 };
 
@@ -65,9 +80,16 @@ export type IssueDetail = PublicReport & {
   supportedByMe: boolean;
   evidence: PublicEvidence[];
   events: PublicStatusEvent[];
-  /** Latest moderator-verified status, separate from any citizen claim. */
+  /**
+   * Latest status backed by a verified official portal citation. A moderator's
+   * unverified note never appears here.
+   */
   officialStatus: StatusValue | null;
   officialCheckedAt: string | null;
+  officialSourceHost: string | null;
+  officialSourceCheckedAt: string | null;
+  /** Latest moderator note with no verified official source. */
+  latestModeratorClaim: PublicStatusEvent | null;
   /** Latest status the reporter claims (never treated as verified). */
   latestUserClaim: PublicStatusEvent | null;
 };
@@ -145,8 +167,13 @@ export type AddEvidenceInput = {
  * Store new evidence as *pending*.
  *
  * Files live in the private media scope and are only readable through a route
- * that checks `status = 'approved'`, so a pending upload cannot leak even by
- * guessing its id. A human moderator approves before anything becomes public.
+ * that checks `status = 'approved'` and that the parent report is still public,
+ * so a pending upload cannot leak even by guessing its id. A human moderator
+ * approves before anything becomes public.
+ *
+ * The note becomes public text, so it is scanned for personal-information
+ * shapes and rejected with an editable explanation. The scan is heuristic; the
+ * moderator still has to read it.
  */
 export async function addEvidence(
   db: Db,
@@ -161,6 +188,15 @@ export async function addEvidence(
   }
   if (!input.image.working.byteLength) {
     throw badRequest("사진을 처리하지 못했습니다.");
+  }
+
+  const findings = scanText("note", input.note);
+  if (findings.length > 0) {
+    const kinds = [...new Set(findings.map((finding) => finding.kind))];
+    throw badRequest(
+      "근거 설명에 개인정보로 보이는 내용이 있습니다. 이 설명은 공개되므로 지운 뒤 다시 올려 주세요.",
+      { kinds, labels: kinds.map((kind) => TEXT_FINDING_LABEL[kind]) },
+    );
   }
 
   const key = newMediaKey("webp");
@@ -203,6 +239,7 @@ export function listApprovedEvidence(db: Db, reportId: string): PublicEvidence[]
     note: row.note,
     photoUrl: `/api/public/evidence/${row.id}/photo`,
     createdAt: row.created_at,
+    approvedAt: row.reviewed_at,
   }));
 }
 
@@ -258,13 +295,23 @@ export function reviewEvidence(
   if (row.status !== "pending") {
     throw conflict("이미 검토된 근거입니다.");
   }
-  run(
+  const result = run(
     db,
     `UPDATE evidence
         SET status = ?, reviewed_by = ?, reviewed_at = ?, rejection_reason = ?
       WHERE id = ? AND status = 'pending'`,
-    [decision, moderator.id, now.toISOString(), decision === "rejected" ? reason ?? null : null, evidenceId],
+    [
+      decision,
+      moderator.id,
+      now.toISOString(),
+      decision === "rejected" ? reason ?? null : null,
+      evidenceId,
+    ],
   );
+  // Two moderators can race on the same row; only one decision may land.
+  if (result.changes !== 1) {
+    throw conflict("다른 운영자가 먼저 검토한 근거입니다.");
+  }
   return getEvidenceRow(db, evidenceId);
 }
 
@@ -272,27 +319,85 @@ export function reviewEvidence(
 /* Status events                                                              */
 /* -------------------------------------------------------------------------- */
 
+export type AddStatusEventInput = {
+  kind: StatusKind;
+  status: StatusValue;
+  note: string;
+  sourceUrl?: string;
+};
+
+/**
+ * Append a status event with a *checked* provenance.
+ *
+ * The only path to `official_source` is a moderator citing a page whose host is
+ * in the curated official-portal registry. Any other link — however official it
+ * looks — is stored as a `moderator_claim`, which the public UI labels as
+ * unverified. HTTPS by itself is never treated as proof of provenance.
+ */
 export function addStatusEvent(
   db: Db,
   actor: PublicUser,
   publicReportId: string,
-  input: { kind: StatusKind; status: StatusValue; note: string; sourceUrl?: string },
+  input: AddStatusEventInput,
   now: Date = new Date(),
 ): StatusEventRow {
   const row = getPublishedReportRow(db, publicReportId);
 
-  if (input.kind === "user_claim" && row.owner_id !== actor.id) {
-    throw forbidden("진행 상황에 대한 시민 주장은 제보 작성자만 기록할 수 있습니다.");
-  }
-  if ((input.kind === "official" || input.kind === "mock") && actor.role !== "moderator") {
-    throw forbidden("공식·모의 상태는 운영자만 기록할 수 있습니다.");
-  }
-  if (input.kind === "official") {
-    if (!input.sourceUrl) {
-      throw badRequest("공식 상태에는 출처 주소가 필요합니다.");
+  let sourceUrl: string | null = null;
+  let sourceHost: string | null = null;
+  let sourceCheckedAt: string | null = null;
+
+  switch (input.kind) {
+    case "user_claim": {
+      if (row.owner_id !== actor.id) {
+        throw forbidden("진행 상황에 대한 시민 주장은 제보 작성자만 기록할 수 있습니다.");
+      }
+      if (input.sourceUrl) {
+        throw badRequest("시민 주장에는 출처 주소를 붙일 수 없습니다.");
+      }
+      break;
     }
-    if (!input.sourceUrl.startsWith("https://")) {
-      throw badRequest("출처 주소는 https:// 로 시작해야 합니다.");
+    case "mock": {
+      if (actor.role !== "moderator") {
+        throw forbidden("모의 상태는 운영자만 기록할 수 있습니다.");
+      }
+      if (input.sourceUrl) {
+        throw badRequest("모의 데이터에는 출처 주소를 붙일 수 없습니다.");
+      }
+      break;
+    }
+    case "official_source": {
+      if (actor.role !== "moderator") {
+        throw forbidden("공식 출처 기록은 운영자만 할 수 있습니다.");
+      }
+      const checked = checkOfficialSourceUrl(input.sourceUrl ?? "");
+      if (!checked.ok) {
+        throw badRequest(OFFICIAL_SOURCE_REJECTION_MESSAGE[checked.reason], {
+          reason: checked.reason,
+          host: checked.host,
+          allowedHosts: "등록된 공식 포털 도메인만 사용할 수 있습니다.",
+        });
+      }
+      sourceUrl = checked.url;
+      sourceHost = checked.host;
+      sourceCheckedAt = checked.registry.asOf;
+      break;
+    }
+    case "moderator_claim": {
+      if (actor.role !== "moderator") {
+        throw forbidden("운영자 기록은 운영자만 남길 수 있습니다.");
+      }
+      if (input.sourceUrl) {
+        const parsed = parseSupportingSourceUrl(input.sourceUrl);
+        if (!parsed.ok) {
+          throw badRequest(OFFICIAL_SOURCE_REJECTION_MESSAGE[parsed.reason], {
+            reason: parsed.reason,
+          });
+        }
+        sourceUrl = parsed.url;
+        sourceHost = parsed.host;
+      }
+      break;
     }
   }
 
@@ -300,15 +405,17 @@ export function addStatusEvent(
   run(
     db,
     `INSERT INTO status_events
-       (id, report_id, kind, status, note, source_url, created_by, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, report_id, kind, status, note, source_url, source_host, source_checked_at, created_by, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       row.id,
       input.kind,
       input.status,
       input.note,
-      input.sourceUrl ?? null,
+      sourceUrl,
+      sourceHost,
+      sourceCheckedAt,
       actor.id,
       now.toISOString(),
     ],
@@ -329,6 +436,14 @@ export function listStatusEvents(db: Db, reportId: string): StatusEventRow[] {
   );
 }
 
+/** Latest event of a kind, in the same order the timeline is displayed. */
+export function latestEventOfKind(
+  events: StatusEventRow[],
+  kind: StatusKind,
+): StatusEventRow | null {
+  return [...events].reverse().find((event) => event.kind === kind) ?? null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Public aggregation                                                         */
 /* -------------------------------------------------------------------------- */
@@ -340,6 +455,8 @@ export function toPublicStatusEvent(row: StatusEventRow): PublicStatusEvent {
     status: row.status,
     note: row.note,
     sourceUrl: row.source_url,
+    sourceHost: row.source_host,
+    sourceCheckedAt: row.source_checked_at,
     createdAt: row.created_at,
   };
 }
@@ -351,10 +468,11 @@ export function getIssueDetail(
 ): IssueDetail {
   const row = getPublishedReportRow(db, publicReportId);
   const base = getPublicReport(db, publicReportId);
-  const events = listStatusEvents(db, row.id).map(toPublicStatusEvent);
-  const official = [...events].reverse().find((event) => event.kind === "official") ?? null;
-  const claim =
-    [...events].reverse().find((event) => event.kind === "user_claim") ?? null;
+  const eventRows = listStatusEvents(db, row.id);
+  const events = eventRows.map(toPublicStatusEvent);
+  const official = latestEventOfKind(eventRows, "official_source");
+  const moderatorClaim = latestEventOfKind(eventRows, "moderator_claim");
+  const claim = latestEventOfKind(eventRows, "user_claim");
 
   return {
     ...base,
@@ -363,8 +481,13 @@ export function getIssueDetail(
     evidence: listApprovedEvidence(db, row.id),
     events,
     officialStatus: official?.status ?? null,
-    officialCheckedAt: official?.createdAt ?? null,
-    latestUserClaim: claim,
+    officialCheckedAt: official?.created_at ?? null,
+    officialSourceHost: official?.source_host ?? null,
+    officialSourceCheckedAt: official?.source_checked_at ?? null,
+    latestModeratorClaim: moderatorClaim
+      ? toPublicStatusEvent(moderatorClaim)
+      : null,
+    latestUserClaim: claim ? toPublicStatusEvent(claim) : null,
   };
 }
 
@@ -386,7 +509,7 @@ export function listPublicIssues(db: Db, limit = 30): FeedItem[] {
             r.published_at,
             (SELECT COUNT(*) FROM supports s WHERE s.report_id = r.id) AS support_count,
             (SELECT e.status FROM status_events e
-              WHERE e.report_id = r.id AND e.kind = 'official'
+              WHERE e.report_id = r.id AND e.kind = 'official_source'
               ORDER BY e.created_at DESC LIMIT 1) AS official_status
        FROM reports r
       WHERE r.state = 'published'

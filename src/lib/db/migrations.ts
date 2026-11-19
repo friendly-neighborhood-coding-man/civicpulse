@@ -1,5 +1,10 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import {
+  checkOfficialSourceUrl,
+  parseSupportingSourceUrl,
+} from "../domain/official-sources.ts";
+
 export type Migration = {
   version: number;
   name: string;
@@ -187,6 +192,111 @@ export const migrations: Migration[] = [
         );
         CREATE INDEX followups_report_idx ON followups(report_id, created_at);
         CREATE INDEX followups_status_idx ON followups(status, created_at);
+      `);
+    },
+  },
+  {
+    version: 6,
+    name: "trust: public text review and official-source provenance",
+    up(db) {
+      db.exec(`
+        -- Text copied from a private draft into the public page requires its own
+        -- review. These columns record that a human read the public text and how
+        -- many heuristic candidates were shown (counts/kinds only, never values).
+        ALTER TABLE reports ADD COLUMN text_reviewed_at TEXT;
+        ALTER TABLE reports ADD COLUMN text_review_version TEXT;
+        ALTER TABLE reports ADD COLUMN text_findings TEXT NOT NULL DEFAULT '[]';
+
+        -- Status provenance is rebuilt because the previous CHECK constraint
+        -- conflated "moderator typed a URL" with "official government record".
+        CREATE TABLE status_events_v2 (
+          id                TEXT PRIMARY KEY,
+          report_id         TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+          kind              TEXT NOT NULL CHECK (kind IN
+                              ('official_source','moderator_claim','user_claim','mock')),
+          status            TEXT NOT NULL CHECK (status IN
+                              ('open','acknowledged','in_progress','resolved','unresolved','recurred')),
+          note              TEXT NOT NULL,
+          source_url        TEXT,
+          -- Verified portal host (for official_source) or the real host of a
+          -- supporting link, so the UI can show where a link actually points.
+          source_host       TEXT,
+          -- Registry as-of date: when the cited portal was last checked.
+          source_checked_at TEXT,
+          created_by        TEXT NOT NULL REFERENCES users(id),
+          created_at        TEXT NOT NULL
+        );
+      `);
+
+      // Reclassify existing rows with the same rule the write path now uses.
+      // A legacy 'official' row whose source is not a verified portal becomes a
+      // moderator claim: the old UI overstated it, and this migration must not
+      // preserve that overstatement.
+      const legacy = db
+        .prepare(
+          `SELECT id, report_id, kind, status, note, source_url, created_by, created_at
+             FROM status_events
+            ORDER BY created_at, rowid`,
+        )
+        .all() as unknown as Array<{
+        id: string;
+        report_id: string;
+        kind: string;
+        status: string;
+        note: string;
+        source_url: string | null;
+        created_by: string;
+        created_at: string;
+      }>;
+
+      const insert = db.prepare(
+        `INSERT INTO status_events_v2
+           (id, report_id, kind, status, note, source_url, source_host, source_checked_at, created_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+
+      for (const row of legacy) {
+        let kind = row.kind;
+        let sourceUrl = row.source_url;
+        let sourceHost: string | null = null;
+        let sourceCheckedAt: string | null = null;
+
+        if (row.kind === "official") {
+          const checked = sourceUrl ? checkOfficialSourceUrl(sourceUrl) : null;
+          if (checked?.ok) {
+            kind = "official_source";
+            sourceUrl = checked.url;
+            sourceHost = checked.host;
+            sourceCheckedAt = checked.registry.asOf;
+          } else {
+            kind = "moderator_claim";
+            const supporting = parseSupportingSourceUrl(sourceUrl ?? undefined);
+            sourceHost = supporting.ok ? supporting.host : null;
+            sourceCheckedAt = null;
+          }
+        } else {
+          // Citizen claims and mock rows never carry a source link.
+          sourceUrl = null;
+        }
+
+        insert.run(
+          row.id,
+          row.report_id,
+          kind,
+          row.status,
+          row.note,
+          sourceUrl,
+          sourceHost,
+          sourceCheckedAt,
+          row.created_by,
+          row.created_at,
+        );
+      }
+
+      db.exec(`
+        DROP TABLE status_events;
+        ALTER TABLE status_events_v2 RENAME TO status_events;
+        CREATE INDEX status_events_report_idx ON status_events(report_id, created_at);
       `);
     },
   },

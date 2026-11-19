@@ -37,6 +37,9 @@ export type ReportRow = {
   published_at: string | null;
   privacy_reviewed_at: string | null;
   consent_version: string | null;
+  text_reviewed_at: string | null;
+  text_review_version: string | null;
+  text_findings: string;
   created_at: string;
   updated_at: string;
 };

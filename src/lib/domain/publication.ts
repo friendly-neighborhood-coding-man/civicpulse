@@ -3,6 +3,16 @@ import { one, run, transaction, all } from "../db/query.ts";
 import { conflict, notFound } from "../http/errors.ts";
 import { internalId, isPublicId } from "../ids.ts";
 import { MAX_MASKS, type MaskRect } from "../privacy/masks.ts";
+import {
+  TEXT_PRIVACY_LIMITATION,
+  TEXT_REVIEW_VERSION,
+  publicTextReviewToken,
+  scanPublicText,
+  summarizeFindings,
+  toTextReviewAudit,
+  type TextFinding,
+  type TextFindingSummary,
+} from "../privacy/text.ts";
 import { applyRedaction } from "../services/redaction.ts";
 import { newMediaKey, removeMedia, readMedia, writeMedia } from "../services/media-store.ts";
 import { getMediaByRole, getOwnedReportRow, type ReportRow } from "./reports.ts";
@@ -17,6 +27,12 @@ export type PublishAck = {
   consent: boolean;
   /** Required when there are no masks at all. */
   noSensitiveContent: boolean;
+  /** "I read the exact title and body that will be public." */
+  textReviewed: boolean;
+  /** Required when the heuristic text scan reported candidates. */
+  textFindingsReviewed: boolean;
+  /** Token of the exact title/body the acknowledgements refer to. */
+  textToken: string;
 };
 
 export type PublishResult = {
@@ -25,7 +41,36 @@ export type PublishResult = {
   publishedAt: string;
   maskCount: number;
   photo: { width: number; height: number };
+  /** How many text candidates the publisher was shown (never the values). */
+  textFindingCount: number;
 };
+
+/** Owner-visible text review payload: masked previews only, never raw values. */
+export type PublicTextReview = {
+  title: string;
+  description: string;
+  findings: TextFinding[];
+  summary: TextFindingSummary;
+  limitation: string;
+  version: string;
+  /** Changes whenever the published text changes. */
+  token: string;
+};
+
+export function buildPublicTextReview(
+  row: Pick<ReportRow, "title" | "description">,
+): PublicTextReview {
+  const findings = scanPublicText({ title: row.title, description: row.description });
+  return {
+    title: row.title,
+    description: row.description,
+    findings,
+    summary: summarizeFindings(findings),
+    limitation: TEXT_PRIVACY_LIMITATION,
+    version: TEXT_REVIEW_VERSION,
+    token: publicTextReviewToken(row),
+  };
+}
 
 /**
  * Publish a redacted copy of a draft.
@@ -61,6 +106,35 @@ export async function publishReport(
   if (input.masks.length === 0 && !input.ack.noSensitiveContent) {
     throw conflict(
       "가림 영역이 없습니다. 사진에 얼굴·번호판 등 개인정보가 없다는 확인이 필요합니다.",
+    );
+  }
+
+  // The public page copies the draft's title and body verbatim, so the photo
+  // acknowledgements alone are not enough. The scan is heuristic and its output
+  // is advisory; a human must still read and accept the exact public text.
+  const textFindings = scanPublicText({
+    title: row.title,
+    description: row.description,
+  });
+  const textSummary = summarizeFindings(textFindings);
+  if (!input.ack.textReviewed) {
+    throw conflict(
+      "공개할 제목과 본문을 직접 읽고 확인해야 합니다. 사진 검토만으로는 글이 보호되지 않습니다.",
+      { textFindings: textSummary },
+    );
+  }
+  // The acknowledgement must refer to the text that is stored right now. Without
+  // this, a checkbox ticked before an edit would silently approve the new text.
+  if (input.ack.textToken !== publicTextReviewToken(row)) {
+    throw conflict(
+      "확인한 글과 지금 공개할 글이 다릅니다. 본문을 다시 읽고 확인해 주세요.",
+      { textReview: buildPublicTextReview(row) },
+    );
+  }
+  if (textFindings.length > 0 && !input.ack.textFindingsReviewed) {
+    throw conflict(
+      "공개할 글에서 개인정보로 보이는 항목이 발견되었습니다. 본문을 수정하거나 표시된 항목을 확인한 뒤 다시 시도해 주세요.",
+      { textFindings: textSummary },
     );
   }
 
@@ -128,9 +202,21 @@ export async function publishReport(
                 published_at = ?,
                 privacy_reviewed_at = ?,
                 consent_version = ?,
+                text_reviewed_at = ?,
+                text_review_version = ?,
+                text_findings = ?,
                 updated_at = ?
           WHERE id = ?`,
-        [timestamp, timestamp, CONSENT_VERSION, timestamp, row.id],
+        [
+          timestamp,
+          timestamp,
+          CONSENT_VERSION,
+          timestamp,
+          TEXT_REVIEW_VERSION,
+          JSON.stringify(toTextReviewAudit(textFindings)),
+          timestamp,
+          row.id,
+        ],
       );
     });
   } catch (error) {
@@ -144,6 +230,7 @@ export async function publishReport(
     publishedAt: timestamp,
     maskCount: input.masks.length,
     photo: { width: redacted.width, height: redacted.height },
+    textFindingCount: textFindings.length,
   };
 }
 

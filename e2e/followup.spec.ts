@@ -29,11 +29,21 @@ async function publishIssue(page: Page, baseURL: string): Promise<string> {
   expect(created.status()).toBe(201);
   const draftId = (await created.json()).data.report.publicId as string;
 
+  const review = await page.request.get(`/api/reports/${draftId}/privacy/text`);
+  expect(review.status()).toBe(200);
+  const textToken = (await review.json()).data.textReview.token as string;
+
   const published = await page.request.post(`/api/reports/${draftId}/publish`, {
     headers: { origin: baseURL, "content-type": "application/json" },
     data: {
       masks: [{ x: 0.2, y: 0.2, w: 0.3, h: 0.3, mode: "solid", source: "manual" }],
-      ack: { privacyReviewed: true, consent: true, noSensitiveContent: false },
+      ack: {
+        privacyReviewed: true,
+        consent: true,
+        noSensitiveContent: false,
+        textReviewed: true,
+        textToken,
+      },
     },
   });
   expect(published.status()).toBe(200);

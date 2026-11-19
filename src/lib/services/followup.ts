@@ -1,5 +1,10 @@
 import type { PublicChannel } from "../domain/channels.ts";
-import { KIND_LABEL, STATUS_LABEL, type StatusValue } from "../validation/community.ts";
+import {
+  KIND_LABEL,
+  STATUS_LABEL,
+  type StatusKind,
+  type StatusValue,
+} from "../validation/community.ts";
 
 /**
  * Deterministic follow-up draft.
@@ -19,9 +24,16 @@ export type FollowupBody = {
     label: string;
     note: string;
     sourceUrl: string | null;
+    /** Host the cited official-portal link actually points at. */
+    sourceHost: string | null;
     checkedAt: string;
   } | null;
-  claims: Array<{ label: string; note: string; createdAt: string }>;
+  claims: Array<{
+    kind: StatusKind;
+    label: string;
+    note: string;
+    createdAt: string;
+  }>;
   evidence: Array<{ note: string; createdAt: string }>;
   channel: { name: string; operator: string; url: string } | null;
   attachments: string[];
@@ -39,9 +51,15 @@ export type FollowupInput = {
     status: StatusValue;
     note: string;
     sourceUrl: string | null;
+    sourceHost: string | null;
     createdAt: string;
   } | null;
-  claims: Array<{ status: StatusValue; note: string; createdAt: string }>;
+  claims: Array<{
+    kind: StatusKind;
+    status: StatusValue;
+    note: string;
+    createdAt: string;
+  }>;
   evidence: Array<{ note: string; createdAt: string }>;
   channel: PublicChannel | null;
 };
@@ -67,17 +85,21 @@ export function generateFollowupDraft(input: FollowupInput): FollowupBody {
       `${input.areaLabel}에서 ${formatDate(input.publishedAt)}에 공개된 시민 제보입니다.`,
       `공개 후 ${input.ageDays}일이 지났고, ${evidenceSummary}`,
       input.official
-        ? `마지막으로 확인된 공식 상태는 '${STATUS_LABEL[input.official.status]}'입니다.`
-        : "아직 확인된 공식 상태가 없습니다.",
+        ? `마지막으로 확인된 공식 출처 기록은 '${STATUS_LABEL[input.official.status]}'입니다. 정부 시스템과 자동 연동된 기록은 아닙니다.`
+        : "아직 공식 포털 출처와 함께 확인된 상태가 없습니다.",
     ].join(" "),
     currentSituation: [
       `현황: ${input.title}`,
       input.official
-        ? `공식 확인(${formatDate(input.official.createdAt)}): ${input.official.note}`
-        : "공식 확인: 아직 없습니다.",
+        ? `공식 출처 확인(${formatDate(input.official.createdAt)}${
+            input.official.sourceHost ? `, ${input.official.sourceHost}` : ""
+          }): ${input.official.note}`
+        : "공식 출처 확인: 아직 없습니다.",
       ...input.claims.map(
         (claim) =>
-          `시민 주장(${formatDate(claim.createdAt)}, 검증되지 않음): ${claim.note}`,
+          `${KIND_LABEL[claim.kind] ?? KIND_LABEL.user_claim}(${formatDate(
+            claim.createdAt,
+          )}, 검증되지 않음): ${claim.note}`,
       ),
       ...input.evidence.map(
         (item) => `추가 근거(${formatDate(item.createdAt)}): ${item.note}`,
@@ -91,11 +113,14 @@ export function generateFollowupDraft(input: FollowupInput): FollowupBody {
           label: STATUS_LABEL[input.official.status],
           note: input.official.note,
           sourceUrl: input.official.sourceUrl,
+          sourceHost: input.official.sourceHost,
           checkedAt: input.official.createdAt,
         }
       : null,
     claims: input.claims.map((claim) => ({
-      label: KIND_LABEL.user_claim,
+      kind: claim.kind,
+      // Fall back for drafts persisted before provenance kinds existed.
+      label: KIND_LABEL[claim.kind] ?? KIND_LABEL.user_claim,
       note: claim.note,
       createdAt: claim.createdAt,
     })),

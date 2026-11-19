@@ -11,6 +11,7 @@ import { getDb } from "@/lib/db/connection";
 import { getChannel, toPublicChannel } from "@/lib/domain/channels";
 import { categoryLabel } from "@/lib/domain/areas";
 import { getFollowupForOwner } from "@/lib/domain/followup";
+import { buildPublicTextReview } from "@/lib/domain/publication";
 import { getOwnedReportRow, toOwnerReport } from "@/lib/domain/reports";
 import { getWorkingMedia } from "@/lib/domain/reports";
 import { ApiError } from "@/lib/http/errors";
@@ -182,6 +183,7 @@ export default async function ReportDraftPage({ params }: PageProps) {
               photoUrl={report.photo.url}
               photoWidth={report.photo.width}
               photoHeight={report.photo.height}
+              textReview={buildPublicTextReview(report)}
             />
           ) : null}
 
