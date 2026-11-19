@@ -29,9 +29,9 @@ CivicPulse aims to reduce that friction while distinguishing citizen claims, off
 5. Track *user-reported*, *officially confirmed* and *unverified* status separately.
 6. When an applicable waiting period has passed **and substantive new evidence exists**, prepare a reviewable follow-up; never auto-send.
 
-## Current implementation (stage 03 — privacy and publication)
+## Current implementation (stage 04 — community and tracking)
 
-Working today on `stack/03-privacy`:
+Working today on `stack/04-community`:
 
 - responsive Next.js 16 shell with an honest description of scope and safety boundaries;
 - demo identity switching (signed httpOnly cookie) with seeded citizen/moderator identities;
@@ -50,16 +50,27 @@ Working today on `stack/03-privacy`:
   of masks and consent; originals/working copies stay private;
 - an anonymous public issue page (`/issues/[publicId]`) that exposes only a narrow
   projection: no owner, no coordinates, no original description;
+- **support** that is idempotent per account (a repeated tap cannot inflate a count) and
+  is labelled as participation, not verification;
+- **additional evidence** with a manual privacy confirmation, held as `pending` until a
+  moderator approves it; pending photos 404 publicly;
+- **moderation** at `/moderation` for the moderator role, with approve/reject and an
+  audited reviewer;
+- a **source-labelled timeline**: official statuses (moderator + https source only),
+  citizen claims (owner only) and mock data are shown separately;
+- a public feed at `/issues` listing published issues with support counts and official
+  status;
 - owner-only access to drafts and photos (other users get a 404, not a 403);
 - JSON API conventions: zod validation, same-origin mutation guard, safe error envelope,
   in-process rate limiting;
-- Vitest suite (80 tests) over real SQLite, sharp and redaction pixels, plus Playwright
-  tests (10) in real Chromium.
+- Vitest suite (89 tests) over real SQLite, sharp, redaction pixels and moderation
+  transitions, plus Playwright tests (12) in real Chromium.
 
-Not implemented yet: verified automatic face/plate detection, community support and
-additional evidence, status timelines, and follow-ups. The UI marks these as upcoming
-rather than simulating them. Redaction is manual and labelled as such; the optional
-browser face detector is experimental and unavailable in headless Chromium.
+Not implemented yet: verified automatic face/plate detection and follow-up requests.
+The UI marks follow-ups as the next step rather than simulating them. Redaction is
+manual and labelled as such, and evidence photos are reviewed by a person because no
+automatic evidence redaction exists. The optional browser face detector is experimental
+and unavailable in headless Chromium.
 
 ### Local development
 

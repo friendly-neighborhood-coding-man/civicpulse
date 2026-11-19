@@ -25,8 +25,8 @@ const STEPS = [
   {
     step: "03",
     title: "추적과 후속",
-    body: "공식 확인과 시민 주장을 구분해 기록합니다. 대기 기간과 새 근거가 충족되면 사람이 승인하는 후속 초안을 만듭니다.",
-    status: "다음 단계",
+    body: "공개된 기록에 지지를 표시하고, 검토를 거친 추가 근거와 출처가 붙은 공식 상태를 쌓습니다. 후속 요청 초안은 다음 단계입니다.",
+    status: "추적 사용 가능",
   },
 ];
 
@@ -92,11 +92,17 @@ export default async function HomePage() {
                 데모 사용자로 시작하기
               </a>
             )}
-            <a
-              href="#limits"
+            <Link
+              href="/issues"
               className="inline-flex h-11 items-center rounded-full border border-line bg-surface px-5 text-sm font-semibold text-ink transition hover:border-line-strong"
             >
-              이 프로토타입의 경계 보기
+              공개 제보 둘러보기
+            </Link>
+            <a
+              href="#limits"
+              className="inline-flex h-11 items-center rounded-full px-2 text-sm font-semibold text-muted underline underline-offset-4 transition hover:text-ink"
+            >
+              경계 보기
             </a>
           </div>
 

@@ -53,6 +53,20 @@ export default async function SiteHeader() {
             >
               새 제보
             </Link>
+            <Link
+              href="/issues"
+              className="rounded-full px-3 py-2 text-sm font-medium text-muted transition hover:bg-surface-muted hover:text-ink"
+            >
+              둘러보기
+            </Link>
+            {currentUser?.role === "moderator" ? (
+              <Link
+                href="/moderation"
+                className="rounded-full px-3 py-2 text-sm font-medium text-warn transition hover:bg-warn-soft"
+              >
+                검토
+              </Link>
+            ) : null}
           </nav>
         </div>
 

@@ -11,18 +11,7 @@ import path from "node:path";
 
 const PROJECT_ROOT = process.cwd();
 
-/** Hard limits that protect the process from oversized or malicious input. */
-export const LIMITS = {
-  uploadMaxBytes: 8 * 1024 * 1024,
-  imageMaxPixels: 24_000_000,
-  imageMinSide: 32,
-  maxImageSide: 4096,
-  maxDescriptionLength: 2_000,
-  maxTitleLength: 120,
-  maxMasks: 40,
-  maxEvidenceNoteLength: 500,
-  maxDraftLength: 6_000,
-} as const;
+export { LIMITS } from "./limits.ts";
 
 export type AssistantMode = "mock" | "openai";
 
