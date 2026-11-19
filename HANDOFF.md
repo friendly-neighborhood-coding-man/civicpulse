@@ -1,5 +1,7 @@
 # CivicPulse — handoff
 
+Latest verified commit: `c1a9782` on `stack/06-delivery` (all six branches pushed).
+
 Date: 2026-11-19. Repository: <https://github.com/friendly-neighborhood-coding-man/civicpulse>.
 All work is synthetic: no real report was submitted, no email/SMS sent, no government
 contact fabricated, no deployment or repository setting changed.
@@ -13,7 +15,7 @@ contact fabricated, no deployment or repository setting changed.
 | 03 Privacy & publication | `stack/03-privacy` | `stack/02-report-creation` | `568614f` |
 | 04 Community & tracking | `stack/04-community` | `stack/03-privacy` | `3221194` |
 | 05 Follow-up workflow | `stack/05-followup` | `stack/04-community` | `b1cd7c7` |
-| 06 Demo & Toss readiness | `stack/06-delivery` | `stack/05-followup` | see `git rev-parse stack/06-delivery` |
+| 06 Demo & Toss readiness | `stack/06-delivery` | `stack/05-followup` | `c1a9782` |
 
 **Why no Draft PRs:** the sandbox has no authenticated GitHub CLI or token, so PRs could
 not be opened. Branches are pushed and each PR body is written out, ready to submit:
