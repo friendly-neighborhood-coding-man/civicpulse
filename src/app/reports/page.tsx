@@ -13,7 +13,7 @@ export const metadata = { title: "내 제보" };
 const STATE_LABEL = {
   draft: "비공개 초안",
   published: "공개",
-  removed: "숨김",
+  removed: "공개 중단",
 } as const;
 
 function formatDateTime(iso: string): string {

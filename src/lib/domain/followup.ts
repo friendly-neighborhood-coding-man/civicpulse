@@ -10,8 +10,10 @@ import {
 } from "../services/followup.ts";
 import { getChannel, toPublicChannel } from "./channels.ts";
 import {
+  getSupportCount,
   listApprovedEvidence,
   listStatusEvents,
+  type PublicEvidence,
 } from "./community.ts";
 import { getPublishedReportRow } from "./publication.ts";
 import type { PublicUser } from "./users.ts";
@@ -26,6 +28,7 @@ export type FollowupRow = {
   body_json: string;
   evidence_count: number;
   age_days: number;
+  support_count: number;
   created_at: string;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -39,6 +42,8 @@ export type FollowupView = {
   reviewedAt: string | null;
   evidenceCount: number;
   ageDays: number;
+  /** Support at draft time; context, never a truth or eligibility signal. */
+  supportCount: number;
   body: FollowupBody;
   text: string;
   /** Always true: the application never submits this document. */
@@ -101,6 +106,34 @@ function latestApprovedFollowupRow(db: Db, reportId: string): FollowupRow | null
   );
 }
 
+/**
+ * When the citizen last sent a follow-up (or requested one). New material is
+ * judged relative to this point.
+ */
+function evidenceBaselineIso(db: Db, reportId: string, publishedAt: string): string {
+  const approved = latestApprovedFollowupRow(db, reportId);
+  const latest = latestFollowupRow(db, reportId);
+  return (
+    approved?.reviewed_at ?? approved?.created_at ?? latest?.created_at ?? publishedAt
+  );
+}
+
+/**
+ * Evidence counts as "new" by the moment a moderator approved it, not by upload
+ * time: a photo uploaded before the previous follow-up but approved afterwards
+ * only became available afterwards.
+ */
+function approvedEvidenceAfter(
+  db: Db,
+  reportId: string,
+  baselineIso: string,
+): PublicEvidence[] {
+  const baseline = new Date(baselineIso).getTime();
+  return listApprovedEvidence(db, reportId).filter(
+    (item) => new Date(item.approvedAt ?? item.createdAt).getTime() > baseline,
+  );
+}
+
 function toView(row: FollowupRow): FollowupView {
   let body: FollowupBody;
   try {
@@ -115,6 +148,7 @@ function toView(row: FollowupRow): FollowupView {
     reviewedAt: row.reviewed_at,
     evidenceCount: row.evidence_count,
     ageDays: row.age_days,
+    supportCount: row.support_count ?? 0,
     body,
     text: renderFollowupText(body),
     notSubmitted: true,
@@ -132,12 +166,14 @@ export function getFollowupEligibility(
   reportId: string,
   now: Date = new Date(),
 ): FollowupEligibility {
-  const report = one<{ published_at: string | null }>(
+  const report = one<{ published_at: string | null; state: string }>(
     db,
-    "SELECT published_at FROM reports WHERE id = ?",
+    "SELECT published_at, state FROM reports WHERE id = ?",
     [reportId],
   );
-  if (!report?.published_at) throw conflict("공개된 제보에만 후속 요청을 만들 수 있습니다.");
+  if (!report?.published_at || report.state !== "published") {
+    throw conflict("공개된 제보에만 후속 요청을 만들 수 있습니다.");
+  }
 
   const waitingDays = getFollowupWaitingDays();
   const cooldownDays = getFollowupCooldownDays();
@@ -162,13 +198,10 @@ export function getFollowupEligibility(
 
   const latest = latestFollowupRow(db, reportId);
   const approved = latestApprovedFollowupRow(db, reportId);
-  const baselineIso =
-    approved?.created_at ?? latest?.created_at ?? report.published_at;
+  const baselineIso = evidenceBaselineIso(db, reportId, report.published_at);
 
   const evidence = listApprovedEvidence(db, reportId);
-  const newEvidence = evidence.filter(
-    (item) => new Date(item.createdAt).getTime() > new Date(baselineIso).getTime(),
-  );
+  const newEvidence = approvedEvidenceAfter(db, reportId, baselineIso);
 
   if (newEvidence.length === 0) {
     reasons.push(
@@ -240,13 +273,15 @@ export function requestFollowup(
       note: event.note,
       createdAt: event.created_at,
     }));
-  const evidence = listApprovedEvidence(db, report.id).filter(
-    (item) =>
-      new Date(item.createdAt).getTime() >
-      new Date(
-        latestApprovedFollowupRow(db, report.id)?.created_at ?? report.published_at!,
-      ).getTime(),
+  const baselineIso = evidenceBaselineIso(
+    db,
+    report.id,
+    report.published_at ?? now.toISOString(),
   );
+  const evidence = approvedEvidenceAfter(db, report.id, baselineIso);
+  // Community interest is context for the reader, never a reason the draft is
+  // allowed to exist (eligibility above does not look at it).
+  const supportCount = getSupportCount(db, report.id);
 
   const channel = getChannel(report.channel_id);
   const body = generateFollowupDraft({
@@ -264,7 +299,11 @@ export function requestFollowup(
         }
       : null,
     claims,
-    evidence: evidence.map((item) => ({ note: item.note, createdAt: item.createdAt })),
+    evidence: evidence.map((item) => ({
+      note: item.note,
+      approvedAt: item.approvedAt ?? item.createdAt,
+    })),
+    supportCount,
     channel: channel ? toPublicChannel(channel) : null,
   });
 
@@ -272,8 +311,8 @@ export function requestFollowup(
   run(
     db,
     `INSERT INTO followups
-       (id, report_id, requested_by, status, body_json, evidence_count, age_days, created_at)
-     VALUES (?, ?, ?, 'draft', ?, ?, ?, ?)`,
+       (id, report_id, requested_by, status, body_json, evidence_count, age_days, support_count, created_at)
+     VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?)`,
     [
       id,
       report.id,
@@ -281,6 +320,7 @@ export function requestFollowup(
       JSON.stringify(body),
       evidence.length,
       eligibility.ageDays,
+      supportCount,
       now.toISOString(),
     ],
   );

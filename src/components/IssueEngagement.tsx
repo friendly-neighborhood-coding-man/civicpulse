@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import ReportWithdrawal from "@/components/ReportWithdrawal";
 import {
   KIND_HINT,
   KIND_LABEL,
@@ -398,6 +399,9 @@ export default function IssueEngagement({
             >
               상태 기록
             </button>
+          </div>
+          <div className="mt-4">
+            <ReportWithdrawal publicId={publicId} audience="moderator" />
           </div>
         </section>
       ) : null}

@@ -9,6 +9,7 @@ import {
   addEvidence,
   addStatusEvent,
   reviewEvidence,
+  supportIssue,
 } from "@/lib/domain/community";
 import {
   approveFollowup,
@@ -349,6 +350,101 @@ describe("follow-up drafts", () => {
       followup.body.claims.some((claim) => claim.kind === "moderator_claim"),
     ).toBe(true);
     expect(followup.text).toContain("운영자 기록 · 미검증");
+    db.close();
+  });
+
+  it("reports support as context without letting popularity create a follow-up", async () => {
+    const { db } = tempDb();
+    const row = await publishedReport(db);
+
+    supportIssue(db, NEIGHBOUR, row.public_id);
+    supportIssue(db, actor(2), row.public_id);
+    // A repeat tap by the same account must not inflate the count.
+    expect(supportIssue(db, NEIGHBOUR, row.public_id).supportCount).toBe(2);
+
+    // Support alone is never an eligibility condition.
+    const popular = getFollowupEligibility(
+      db,
+      row.id,
+      new Date("2026-11-20T00:00:00.000Z"),
+    );
+    expect(popular.eligible).toBe(false);
+    expect(popular.reasons.join(" ")).toContain("근거");
+    expect(() =>
+      requestFollowup(db, OWNER, row.public_id, new Date("2026-11-20T00:00:00.000Z")),
+    ).toThrow(ApiError);
+
+    await approvedEvidence(db, row.public_id, new Date("2026-11-02T00:00:00.000Z"));
+    const { followup } = requestFollowup(
+      db,
+      OWNER,
+      row.public_id,
+      new Date("2026-11-20T00:00:00.000Z"),
+    );
+    expect(followup.supportCount).toBe(2);
+    expect(followup.body.communitySupport).toEqual({
+      count: 2,
+      note: expect.stringContaining("지지 2명"),
+      countsAsVerification: false,
+    });
+    expect(followup.text).toContain("[지역 관심]");
+    expect(followup.text).toContain("사실 여부나 정당성을 판정하지 않습니다");
+    db.close();
+  });
+
+  it("counts evidence by approval time, not upload time", async () => {
+    const { db } = tempDb();
+    const row = await publishedReport(db);
+    await approvedEvidence(db, row.public_id, new Date("2026-11-02T00:00:00.000Z"));
+
+    const first = requestFollowup(
+      db,
+      OWNER,
+      row.public_id,
+      new Date("2026-11-20T00:00:00.000Z"),
+    );
+    approveFollowup(db, OWNER, first.followup.id, new Date("2026-11-20T01:00:00.000Z"));
+
+    // Uploaded *before* the previous follow-up, approved *after* it: it became
+    // available only afterwards, so it is new material.
+    const image = await makeTestImage();
+    const { id } = await addEvidence(
+      db,
+      NEIGHBOUR,
+      row.public_id,
+      {
+        note: "보수 공사가 시작되지 않았고 임시 덮개만 놓여 있습니다.",
+        ackNoSensitive: true,
+        image,
+      },
+      new Date("2026-11-19T00:00:00.000Z"),
+    );
+    reviewEvidence(
+      db,
+      MODERATOR,
+      id,
+      "approved",
+      undefined,
+      new Date("2026-11-27T00:00:00.000Z"),
+    );
+
+    const eligibility = getFollowupEligibility(
+      db,
+      row.id,
+      new Date("2026-11-28T00:00:00.000Z"),
+    );
+    expect(eligibility.newEvidenceCount).toBe(1);
+    expect(eligibility.eligible).toBe(true);
+
+    const second = requestFollowup(
+      db,
+      OWNER,
+      row.public_id,
+      new Date("2026-11-28T00:00:00.000Z"),
+    );
+    expect(second.followup.body.evidence).toHaveLength(1);
+    expect(second.followup.body.evidence[0]!.approvedAt).toContain("2026-11-27");
+    expect(second.followup.text).toContain("검토 승인");
     db.close();
   });
 });
