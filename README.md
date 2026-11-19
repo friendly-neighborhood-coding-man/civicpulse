@@ -29,6 +29,50 @@ CivicPulse aims to reduce that friction while distinguishing citizen claims, off
 5. Track *user-reported*, *officially confirmed* and *unverified* status separately.
 6. When an applicable waiting period has passed **and substantive new evidence exists**, prepare a reviewable follow-up; never auto-send.
 
+## Current implementation (stage 01 — foundation)
+
+Working today on `stack/01-foundation`:
+
+- responsive Next.js 16 shell with an honest description of scope and safety boundaries;
+- demo identity switching (signed httpOnly cookie) with seeded citizen/moderator identities;
+- SQLite persistence with versioned migrations, foreign keys and WAL;
+- JSON API conventions: zod validation, same-origin mutation guard, safe error envelope,
+  in-process rate limiting;
+- readiness endpoint (`/api/health`) reporting real schema version and assistant mode;
+- Vitest suite over real SQLite, plus Playwright tests in real Chromium.
+
+Not implemented yet: report creation, AI draft assistance, redaction, publication,
+community features and follow-ups. The UI marks these as upcoming rather than
+simulating them.
+
+### Local development
+
+```bash
+npm install
+npm run dev        # http://localhost:3000
+npm run check      # typecheck + lint + unit tests
+npm run build
+npm test
+```
+
+Browser E2E (optional, needs a one-off download and sandbox libraries):
+
+```bash
+npm run e2e:libs     # extracts Chromium's missing .so files + fonts into .local/ (no root)
+npm run e2e:install  # downloads Chromium
+npm run e2e          # Playwright suites in e2e/
+```
+
+Reset local demo data: `npm run db:reset -- --yes`.
+
+### Documentation
+
+- [Product contract](docs/PRODUCT.md)
+- [Stack workflow and acceptance checks](docs/WORKFLOW.md)
+- [Review checklist](docs/REVIEW_CHECKLIST.md)
+- [Architecture and verification matrix](docs/ARCHITECTURE.md)
+- [Agent instructions](AGENTS.md)
+
 ## Engineering process
 
 Development uses stacked **Draft** PRs and repeated implement → execute → review → fix → verify cycles. See [AGENTS.md](AGENTS.md), [Product scope](docs/PRODUCT.md), [Stack workflow](docs/WORKFLOW.md) and [Review checklist](docs/REVIEW_CHECKLIST.md).
