@@ -88,4 +88,31 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    name: "privacy: publication consent and redaction audit trail",
+    up(db) {
+      db.exec(`
+        ALTER TABLE reports ADD COLUMN published_at TEXT;
+        ALTER TABLE reports ADD COLUMN privacy_reviewed_at TEXT;
+        ALTER TABLE reports ADD COLUMN consent_version TEXT;
+
+        -- One row per rectangle the human confirmed before publication. Kept as
+        -- an audit trail of what was hidden, never rendered to the public.
+        CREATE TABLE redaction_masks (
+          id          TEXT PRIMARY KEY,
+          report_id   TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+          x           REAL NOT NULL CHECK (x >= 0 AND x < 1),
+          y           REAL NOT NULL CHECK (y >= 0 AND y < 1),
+          w           REAL NOT NULL CHECK (w > 0 AND w <= 1),
+          h           REAL NOT NULL CHECK (h > 0 AND h <= 1),
+          mode        TEXT NOT NULL CHECK (mode IN ('pixelate', 'blur', 'solid')),
+          source      TEXT NOT NULL CHECK (source IN ('manual', 'auto')),
+          created_at  TEXT NOT NULL
+        );
+
+        CREATE INDEX redaction_masks_report_idx ON redaction_masks(report_id);
+      `);
+    },
+  },
 ];

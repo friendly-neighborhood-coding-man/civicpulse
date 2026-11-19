@@ -1,6 +1,6 @@
 # CivicPulse architecture (living document)
 
-Last updated: 2026-11-19 (stage 02 — report creation).
+Last updated: 2026-11-19 (stage 03 — privacy and publication).
 
 ## Stack
 
@@ -11,7 +11,7 @@ Last updated: 2026-11-19 (stage 02 — report creation).
 | Persistence | `node:sqlite` (built-in, synchronous) | File at `.local/data/civicpulse.sqlite` (WAL). No native build step. |
 | Media | `sharp` on the server | Originals under `.local/media/private`, publishable derivatives under `.local/media/public`. |
 | Validation | `zod` at every API boundary | Parsed values, not raw JSON, reach domain code. |
-| Tests | Vitest (domain/API) + Playwright (real Chromium) | 58 unit/integration, 7 browser tests at stage 02. |
+| Tests | Vitest (domain/API) + Playwright (real Chromium) | 80 unit/integration, 10 browser tests at stage 03. |
 
 Why SQLite: the MVP is a single-node demo. It keeps the data model relational and
 migration-friendly (`PRAGMA user_version`) without an external service, and can be
@@ -67,6 +67,27 @@ Later stages append migrations; released migrations are never edited.
    in one transaction; on failure both files are deleted again.
 4. The response includes the owner projection and `published: false`, `submitted: false`.
 
+## Privacy and publication flow (stage 03)
+
+1. The owner marks rectangles on the real photo (normalised 0..1 fractions of the
+   image box). Modes: solid (default, opaque), blur, pixellate. Optional experimental
+   face detection only when the browser exposes `FaceDetector`; it is a hint, never a
+   gate.
+2. `POST …/redaction/preview` runs the **same server pipeline** and returns the image
+   bytes with `no-store`. The client shows that exact output.
+3. `POST …/publish` requires: owner + draft state, `privacyReviewed` and `consent`
+   acknowledgements, a separate `noSensitiveContent` acknowledgement when there are no
+   masks, and a preview matching the current mask set. It re-encodes the working copy,
+   applies every mask, writes the result to the **public** storage scope, then records
+   masks, consent version and timestamps in one transaction.
+4. Public reads (`/issues/[publicId]`, `/api/public/reports/[publicId]`, `…/photo`) only
+   ever touch `role = 'public'` media and the narrow public projection (no owner, no
+   coordinates, no original description, no storage keys). Drafts 404 publicly.
+
+Limitation made explicit in code and tests: pixellating a uniform-colour area can
+leave it visually unchanged. The UI therefore defaults to solid, warns about this, and
+never treats any mode or the detector as proof of safety.
+
 ## Official channel registry
 
 `src/lib/domain/channels.ts` is a curated, source-checked list. Each entry records the
@@ -100,10 +121,12 @@ node scripts/capture.mjs http://127.0.0.1:3000   # optional screenshots → .loc
 | Check | Status | Evidence |
 |---|---|---|
 | Typecheck / lint | VERIFIED | `npm run typecheck`, `npm run lint` — exit 0 |
-| Unit + integration | VERIFIED | `npm test` — 58 tests over real SQLite and real sharp decoding |
+| Unit + integration | VERIFIED | `npm test` — 80 tests over real SQLite, real sharp decoding and real redaction pixels |
 | Production build | VERIFIED | `npm run build` |
-| Browser E2E | VERIFIED | `npm run e2e` — 7 Chromium tests incl. create → edit → reload → other-user 404 |
-| Visual layout | VERIFIED (limited) | Desktop 1280×1000 and mobile 390×844 screenshots inspected; no Safari/Firefox run |
+| Browser E2E | VERIFIED | `npm run e2e` — 10 Chromium tests incl. mask → preview → publish → anonymous public read |
+| Visual layout | VERIFIED (limited) | Desktop and mobile screenshots inspected; no Safari/Firefox run |
+| Automatic face detection | NOT_RUN | Only runs if the browser exposes `FaceDetector`; not available in headless Chromium. Mapping logic unit tested. |
+| Plate detection | NOT_IMPLEMENTED | No detector; manual masking only, stated in UI |
 | Remote AI adapter | NOT_RUN | Not implemented; no key or spending authorization |
 | Toss SDK integration | NOT_RUN | Future stage; no platform credentials |
 
@@ -119,3 +142,8 @@ node scripts/capture.mjs http://127.0.0.1:3000   # optional screenshots → .loc
   Workers). A Workers deployment would need D1 plus a storage adapter.
 - Orphaned media files are possible if the process dies between file write and DB commit;
   a periodic sweep is not implemented.
+- Redaction is manual; there is no verified detector, and pixellation can be weak on
+  flat colours (default is solid).
+- A published issue cannot yet be edited or taken down; public photos are cacheable for
+  60 seconds.
+- Masks are not persisted until publication, so leaving the page loses the rectangles.

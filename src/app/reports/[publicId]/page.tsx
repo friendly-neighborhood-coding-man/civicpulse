@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import ChannelCard from "@/components/ChannelCard";
 import DemoSignInCard from "@/components/DemoSignInCard";
 import DraftEditor from "@/components/DraftEditor";
+import PrivacyPublishFlow from "@/components/PrivacyPublishFlow";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/connection";
 import { getChannel, toPublicChannel } from "@/lib/domain/channels";
@@ -70,9 +71,15 @@ export default async function ReportDraftPage({ params }: PageProps) {
       <header className="mt-5 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-warn/30 bg-warn-soft px-2.5 py-1 text-[11px] font-semibold text-warn">
-              비공개 초안
-            </span>
+            {report.state === "published" ? (
+              <span className="rounded-full border border-accent/30 bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent-strong">
+                공개됨
+              </span>
+            ) : (
+              <span className="rounded-full border border-warn/30 bg-warn-soft px-2.5 py-1 text-[11px] font-semibold text-warn">
+                비공개 초안
+              </span>
+            )}
             <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-[11px] text-muted">
               {report.areaLabel} · {categoryLabel(report.category)}
             </span>
@@ -122,26 +129,50 @@ export default async function ReportDraftPage({ params }: PageProps) {
           <section className="card p-6" aria-labelledby="edit-heading">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="edit-heading" className="text-lg font-semibold text-ink">
-                초안 검토·수정
+                {report.state === "draft" ? "초안 검토·수정" : "공개된 본문"}
               </h2>
               <span className="rounded-full border border-line bg-surface-muted px-2.5 py-1 text-[11px] text-muted">
-                편집 가능
+                {report.state === "draft" ? "편집 가능" : "읽기 전용"}
               </span>
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-muted">
-              보조 초안은 출발점입니다. 사실과 다르거나 빠진 내용은 직접 고쳐
-              주세요. 저장하면 서버에 즉시 반영됩니다.
-            </p>
-            <div className="mt-5">
-              <DraftEditor
-                publicId={report.publicId}
-                initialTitle={report.title}
-                initialDescription={report.description}
-                initialLandmark={report.landmark}
-                updatedAt={report.updatedAt}
-              />
-            </div>
+            {report.state === "draft" ? (
+              <>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
+                  보조 초안은 출발점입니다. 사실과 다르거나 빠진 내용은 직접 고쳐
+                  주세요. 저장하면 서버에 즉시 반영됩니다.
+                </p>
+                <div className="mt-5">
+                  <DraftEditor
+                    publicId={report.publicId}
+                    initialTitle={report.title}
+                    initialDescription={report.description}
+                    initialLandmark={report.landmark}
+                    updatedAt={report.updatedAt}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
+                  공개된 제보의 본문은 이 화면에서 수정할 수 없습니다. 공개 후
+                  수정 이력은 다음 단계에서 다룹니다.
+                </p>
+                <h3 className="mt-4 text-sm font-semibold text-ink">{report.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed whitespace-pre-line text-ink-soft">
+                  {report.description}
+                </p>
+              </>
+            )}
           </section>
+
+          {report.state === "draft" && report.photo ? (
+            <PrivacyPublishFlow
+              publicId={report.publicId}
+              photoUrl={report.photo.url}
+              photoWidth={report.photo.width}
+              photoHeight={report.photo.height}
+            />
+          ) : null}
 
           {report.userDescription ? (
             <section className="card p-6" aria-labelledby="original-heading">
@@ -206,14 +237,30 @@ export default async function ReportDraftPage({ params }: PageProps) {
 
           <ChannelCard channel={channel ? toPublicChannel(channel) : null} />
 
-          <section className="rounded-2xl border border-dashed border-line-strong bg-surface-muted p-5">
-            <h2 className="text-sm font-semibold text-ink">다음 단계 · 아직 제공되지 않음</h2>
-            <p className="mt-2 text-xs leading-relaxed text-ink-soft">
-              3단계에서 얼굴·번호판 가림을 검토하고 공개 여부를 결정합니다.
-              이 화면에서는 공개할 수 없으며, 어떤 상태도 공개로 표시되지
-              않습니다.
-            </p>
-          </section>
+          {report.state === "published" ? (
+            <section className="rounded-2xl border border-accent/25 bg-accent-soft/60 p-5">
+              <h2 className="text-sm font-semibold text-ink">공개된 기록</h2>
+              <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+                이 제보는 가림 처리된 사진과 함께 공개되었습니다. 공식 기관의
+                확인은 아직 없습니다.
+              </p>
+              <Link
+                href={`/issues/${report.publicId}`}
+                className="mt-3 inline-flex h-10 items-center rounded-full bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent-strong"
+              >
+                공개 페이지 보기
+              </Link>
+            </section>
+          ) : (
+            <section className="rounded-2xl border border-dashed border-line-strong bg-surface-muted p-5">
+              <h2 className="text-sm font-semibold text-ink">공개하려면</h2>
+              <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+                아래 &lsquo;공개 전 개인정보 검토&rsquo;에서 얼굴·번호판을
+                가리고, 서버 미리보기를 확인한 뒤 직접 공개를 결정할 수 있습니다.
+                공개 전에는 아무도 이 초안을 볼 수 없습니다.
+              </p>
+            </section>
+          )}
         </aside>
       </div>
     </div>

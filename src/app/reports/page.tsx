@@ -46,7 +46,8 @@ export default async function MyReportsPage() {
           <p className="label-caps text-accent">내 제보</p>
           <h1 className="mt-2 text-3xl font-bold text-ink">기록한 제보</h1>
           <p className="mt-2 text-sm text-muted">
-            {user.displayName} 님의 초안 {reports.length}건 · 공개된 제보는 아직 없습니다.
+            {user.displayName} 님의 제보 {reports.length}건 · 공개{" "}
+            {reports.filter((report) => report.state === "published").length}건
           </p>
         </div>
         <Link
@@ -80,23 +81,39 @@ export default async function MyReportsPage() {
                 ) : (
                   <div className="h-40 bg-surface-muted" />
                 )}
-                <div className="p-5">
-                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                    <span className="rounded-full border border-warn/30 bg-warn-soft px-2 py-1 font-semibold text-warn">
-                      {STATE_LABEL[report.state]}
-                    </span>
-                    <span className="text-muted">
-                      {report.areaLabel} · {categoryLabel(report.category)}
-                    </span>
-                  </div>
-                  <h2 className="mt-2 line-clamp-2 text-base font-semibold text-ink">
-                    {report.title || "제목 없는 초안"}
-                  </h2>
-                  <p className="mt-1 text-xs text-muted">
-                    수정 {formatDateTime(report.updatedAt)}
-                  </p>
-                </div>
               </Link>
+              <div className="p-5">
+                <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                  <span
+                    className={
+                      report.state === "published"
+                        ? "rounded-full border border-accent/30 bg-accent-soft px-2 py-1 font-semibold text-accent-strong"
+                        : "rounded-full border border-warn/30 bg-warn-soft px-2 py-1 font-semibold text-warn"
+                    }
+                  >
+                    {STATE_LABEL[report.state]}
+                  </span>
+                  <span className="text-muted">
+                    {report.areaLabel} · {categoryLabel(report.category)}
+                  </span>
+                </div>
+                <h2 className="mt-2 line-clamp-2 text-base font-semibold text-ink">
+                  <Link href={`/reports/${report.publicId}`} className="hover:underline">
+                    {report.title || "제목 없는 초안"}
+                  </Link>
+                </h2>
+                <p className="mt-1 text-xs text-muted">
+                  수정 {formatDateTime(report.updatedAt)}
+                </p>
+                {report.state === "published" ? (
+                  <Link
+                    href={`/issues/${report.publicId}`}
+                    className="mt-2 inline-block text-xs font-medium text-accent-strong underline underline-offset-4"
+                  >
+                    공개 페이지 보기 ↗
+                  </Link>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>

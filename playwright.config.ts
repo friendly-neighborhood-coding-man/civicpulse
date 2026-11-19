@@ -18,11 +18,13 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    // Fresh synthetic data per run: removes the e2e-only data dir first.
-    command: `node -e "require('node:fs').rmSync('.local/e2e',{recursive:true,force:true})" && npx next dev --hostname 127.0.0.1 --port ${PORT}`,
+    // Fresh synthetic data per run, then a production build/server: dev-only
+    // aborted-stream noise made one run flaky, and `next start` matches what a
+    // reviewer would run.
+    command: `node -e "require('node:fs').rmSync('.local/e2e',{recursive:true,force:true})" && npm run build && npx next start --hostname 127.0.0.1 --port ${PORT}`,
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: false,
-    timeout: 180_000,
+    timeout: 240_000,
     env: {
       CIVICPULSE_DATA_DIR: ".local/e2e",
       CIVICPULSE_AI_MODE: "mock",
