@@ -1,6 +1,6 @@
 # CivicPulse architecture (living document)
 
-Last updated: 2026-11-19 (stage 03 — privacy and publication).
+Last updated: 2026-11-19 (stage 04 — community and tracking).
 
 ## Stack
 
@@ -11,7 +11,7 @@ Last updated: 2026-11-19 (stage 03 — privacy and publication).
 | Persistence | `node:sqlite` (built-in, synchronous) | File at `.local/data/civicpulse.sqlite` (WAL). No native build step. |
 | Media | `sharp` on the server | Originals under `.local/media/private`, publishable derivatives under `.local/media/public`. |
 | Validation | `zod` at every API boundary | Parsed values, not raw JSON, reach domain code. |
-| Tests | Vitest (domain/API) + Playwright (real Chromium) | 80 unit/integration, 10 browser tests at stage 03. |
+| Tests | Vitest (domain/API) + Playwright (real Chromium) | 89 unit/integration, 12 browser tests at stage 04. |
 
 Why SQLite: the MVP is a single-node demo. It keeps the data model relational and
 migration-friendly (`PRAGMA user_version`) without an external service, and can be
@@ -88,6 +88,28 @@ Limitation made explicit in code and tests: pixellating a uniform-colour area ca
 leave it visually unchanged. The UI therefore defaults to solid, warns about this, and
 never treats any mode or the detector as proof of safety.
 
+## Community and tracking (stage 04)
+
+- **Support** is a join table with `PRIMARY KEY (report_id, user_id)`: the database, not
+  the UI, guarantees one support per account per issue. Support is displayed as
+  participation, never as verification.
+- **Evidence** is inserted as `pending`, stored in the private scope, and served only
+  through `/api/public/evidence/[id]/photo` when `status = 'approved'`. Moderators see
+  pending photos through a `private, no-store` route. Approve/reject is recorded with
+  reviewer and timestamp; a second decision is refused (409).
+- **Status events** are append-only rows with `kind` (`official` | `user_claim` | `mock`),
+  `status` (a fixed vocabulary), a note and optional source. Authorship rules live in the
+  domain layer: citizens may only record the owner's claim; official/mock need a
+  moderator; official requires an `https://` source. The public projection exposes the
+  latest official status and latest claim as separate fields, and the timeline keeps
+  every event labelled.
+- **Feed** lists published reports only, ordered by publication time, with a support
+  count and the latest official status.
+
+The trust boundary is enforced in SQL and domain code, not in components: `pending`
+rows never reach a public query, and the owner id is used only server-side to decide
+which controls to render.
+
 ## Official channel registry
 
 `src/lib/domain/channels.ts` is a curated, source-checked list. Each entry records the
@@ -121,9 +143,9 @@ node scripts/capture.mjs http://127.0.0.1:3000   # optional screenshots → .loc
 | Check | Status | Evidence |
 |---|---|---|
 | Typecheck / lint | VERIFIED | `npm run typecheck`, `npm run lint` — exit 0 |
-| Unit + integration | VERIFIED | `npm test` — 80 tests over real SQLite, real sharp decoding and real redaction pixels |
+| Unit + integration | VERIFIED | `npm test` — 89 tests over real SQLite, real sharp decoding, real redaction pixels and real moderation state transitions |
 | Production build | VERIFIED | `npm run build` |
-| Browser E2E | VERIFIED | `npm run e2e` — 10 Chromium tests incl. mask → preview → publish → anonymous public read |
+| Browser E2E | VERIFIED | `npm run e2e` — 12 Chromium tests incl. support → pending evidence → moderation → official status, and anonymous read |
 | Visual layout | VERIFIED (limited) | Desktop and mobile screenshots inspected; no Safari/Firefox run |
 | Automatic face detection | NOT_RUN | Only runs if the browser exposes `FaceDetector`; not available in headless Chromium. Mapping logic unit tested. |
 | Plate detection | NOT_IMPLEMENTED | No detector; manual masking only, stated in UI |
@@ -147,3 +169,6 @@ node scripts/capture.mjs http://127.0.0.1:3000   # optional screenshots → .loc
 - A published issue cannot yet be edited or taken down; public photos are cacheable for
   60 seconds.
 - Masks are not persisted until publication, so leaving the page loses the rectangles.
+- Evidence moderation is manual and there is no automatic redaction for evidence photos;
+  approved evidence bytes are not deleted by any takedown flow yet.
+- No notifications, comments or subscriptions; support counts are demo-account counts.

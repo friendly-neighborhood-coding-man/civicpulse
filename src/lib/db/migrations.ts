@@ -115,4 +115,54 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    name: "community: support, moderated evidence and status events",
+    up(db) {
+      db.exec(`
+        -- One row per citizen per issue. The primary key is the abuse guard:
+        -- repeated taps can never inflate a count.
+        CREATE TABLE supports (
+          report_id  TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+          user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (report_id, user_id)
+        );
+
+        CREATE TABLE evidence (
+          id                TEXT PRIMARY KEY,
+          report_id         TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+          user_id           TEXT NOT NULL REFERENCES users(id),
+          storage_key       TEXT NOT NULL,
+          mime              TEXT NOT NULL,
+          width             INTEGER NOT NULL,
+          height            INTEGER NOT NULL,
+          note              TEXT NOT NULL,
+          status            TEXT NOT NULL DEFAULT 'pending'
+                            CHECK (status IN ('pending', 'approved', 'rejected')),
+          reviewed_by       TEXT REFERENCES users(id),
+          reviewed_at       TEXT,
+          rejection_reason  TEXT,
+          created_at        TEXT NOT NULL
+        );
+        CREATE INDEX evidence_report_idx ON evidence(report_id, status, created_at);
+        CREATE INDEX evidence_queue_idx ON evidence(status, created_at);
+
+        -- Citizen claims and official updates are separate rows with separate
+        -- authorship rules; the UI never merges them into one ambiguous status.
+        CREATE TABLE status_events (
+          id          TEXT PRIMARY KEY,
+          report_id   TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+          kind        TEXT NOT NULL CHECK (kind IN ('official', 'user_claim', 'mock')),
+          status      TEXT NOT NULL CHECK (status IN
+                        ('open','acknowledged','in_progress','resolved','unresolved','recurred')),
+          note        TEXT NOT NULL,
+          source_url  TEXT,
+          created_by  TEXT NOT NULL REFERENCES users(id),
+          created_at  TEXT NOT NULL
+        );
+        CREATE INDEX status_events_report_idx ON status_events(report_id, created_at);
+      `);
+    },
+  },
 ];
