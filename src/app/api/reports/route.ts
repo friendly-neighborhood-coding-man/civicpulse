@@ -33,8 +33,10 @@ export async function POST(request: Request) {
   return withApi(async () => {
     assertSameOrigin(request);
     const user = await requireUser();
+    // Abuse guard, not a UX limit: a person cannot realistically create 20
+    // drafts in ten minutes, while automated spam is still bounded.
     enforceRateLimit(`reports:create:${user.id}`, {
-      limit: 5,
+      limit: 20,
       windowMs: 10 * 60_000,
       message: "제보 초안은 잠시 후 다시 만들 수 있습니다.",
     });

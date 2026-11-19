@@ -165,4 +165,29 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: "follow-up drafts with human approval",
+    up(db) {
+      db.exec(`
+        -- A follow-up is a *draft for a human to submit themselves*. There is
+        -- no 'sent' state: the application never transmits it anywhere.
+        CREATE TABLE followups (
+          id             TEXT PRIMARY KEY,
+          report_id      TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+          requested_by   TEXT NOT NULL REFERENCES users(id),
+          status         TEXT NOT NULL CHECK (status IN ('draft', 'approved', 'discarded')),
+          body_json      TEXT NOT NULL,
+          evidence_count INTEGER NOT NULL,
+          age_days       INTEGER NOT NULL,
+          created_at     TEXT NOT NULL,
+          reviewed_by    TEXT REFERENCES users(id),
+          reviewed_at    TEXT,
+          discarded_at   TEXT
+        );
+        CREATE INDEX followups_report_idx ON followups(report_id, created_at);
+        CREATE INDEX followups_status_idx ON followups(status, created_at);
+      `);
+    },
+  },
 ];

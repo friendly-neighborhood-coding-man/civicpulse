@@ -4,11 +4,13 @@ import { notFound } from "next/navigation";
 import ChannelCard from "@/components/ChannelCard";
 import DemoSignInCard from "@/components/DemoSignInCard";
 import DraftEditor from "@/components/DraftEditor";
+import FollowupPanel from "@/components/FollowupPanel";
 import PrivacyPublishFlow from "@/components/PrivacyPublishFlow";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/connection";
 import { getChannel, toPublicChannel } from "@/lib/domain/channels";
 import { categoryLabel } from "@/lib/domain/areas";
+import { getFollowupForOwner } from "@/lib/domain/followup";
 import { getOwnedReportRow, toOwnerReport } from "@/lib/domain/reports";
 import { getWorkingMedia } from "@/lib/domain/reports";
 import { ApiError } from "@/lib/http/errors";
@@ -53,6 +55,11 @@ export default async function ReportDraftPage({ params }: PageProps) {
   }
 
   const channel = getChannel(report.channelId);
+  // Rendered on the server so the panel never has to fetch-on-mount.
+  const followup =
+    report.state === "published"
+      ? getFollowupForOwner(db, user, report.publicId)
+      : null;
 
   return (
     <div className="container-page py-10 sm:py-14">
@@ -164,6 +171,10 @@ export default async function ReportDraftPage({ params }: PageProps) {
               </>
             )}
           </section>
+
+          {followup ? (
+            <FollowupPanel publicId={report.publicId} initial={followup} />
+          ) : null}
 
           {report.state === "draft" && report.photo ? (
             <PrivacyPublishFlow

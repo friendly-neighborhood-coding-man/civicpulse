@@ -28,7 +28,9 @@ export default defineConfig({
     env: {
       CIVICPULSE_DATA_DIR: ".local/e2e",
       CIVICPULSE_AI_MODE: "mock",
-      CIVICPULSE_FOLLOWUP_WAITING_DAYS: "1",
+      // 0 so the demo can exercise the follow-up flow immediately; the shipped
+      // default is 14 days and the UI always prints the configured value.
+      CIVICPULSE_FOLLOWUP_WAITING_DAYS: "0",
     },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
