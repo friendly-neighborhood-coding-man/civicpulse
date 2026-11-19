@@ -29,9 +29,9 @@ CivicPulse aims to reduce that friction while distinguishing citizen claims, off
 5. Track *user-reported*, *officially confirmed* and *unverified* status separately.
 6. When an applicable waiting period has passed **and substantive new evidence exists**, prepare a reviewable follow-up; never auto-send.
 
-## Current implementation (stage 05 — follow-up workflow)
+## Current implementation (stage 06 — demo & Toss readiness)
 
-Working today on `stack/05-followup`:
+Working today on `stack/06-delivery`:
 
 - responsive Next.js 16 shell with an honest description of scope and safety boundaries;
 - demo identity switching (signed httpOnly cookie) with seeded citizen/moderator identities;
@@ -65,17 +65,22 @@ Working today on `stack/05-followup`:
   that keeps official status and citizen claims separate, and explicit human approval
   before the citizen submits it through the verified channel themselves — the app has
   no submission path;
+- a **platform boundary** (`src/lib/platform/bridge.ts`) that reports the web runtime
+  honestly and leaves a documented, unimplemented Toss adapter slot — no Toss SDK is
+  bundled or called. See [docs/TOSS_READINESS.md](docs/TOSS_READINESS.md) and the demo
+  runbook in [docs/DEMO.md](docs/DEMO.md);
 - owner-only access to drafts and photos (other users get a 404, not a 403);
 - JSON API conventions: zod validation, same-origin mutation guard, safe error envelope,
   in-process rate limiting;
-- Vitest suite (95 tests) over real SQLite, sharp, redaction pixels, moderation
-  transitions and follow-up eligibility, plus Playwright tests (14) in real Chromium.
+- Vitest suite (98 tests) over real SQLite, sharp, redaction pixels, moderation
+  transitions, follow-up eligibility and the platform boundary, plus Playwright tests
+  (14) in real Chromium.
 
 Not implemented yet: verified automatic face/plate detection, model-generated drafting,
-file export and submission tracking. Redaction is manual and labelled as such, evidence
-photos are reviewed by a person because no automatic evidence redaction exists, and the
-follow-up draft is a deterministic template. The optional browser face detector is
-experimental and unavailable in headless Chromium.
+file export, submission tracking and any Toss SDK integration. Redaction is manual and
+labelled as such, evidence photos are reviewed by a person because no automatic evidence
+redaction exists, and the follow-up draft is a deterministic template. The optional
+browser face detector is experimental and unavailable in headless Chromium.
 
 ### Local development
 
