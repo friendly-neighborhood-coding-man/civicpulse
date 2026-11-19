@@ -39,6 +39,14 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* Korean line breaking: wrap between words, not inside them. */
+    word-break: keep-all;
+  }
+
+  /* Long URLs and generated ids may still need to break. */
+  a,
+  code {
+    overflow-wrap: anywhere;
   }
 
   ::selection {

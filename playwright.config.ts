@@ -18,7 +18,8 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: `npx next dev --hostname 127.0.0.1 --port ${PORT}`,
+    // Fresh synthetic data per run: removes the e2e-only data dir first.
+    command: `node -e "require('node:fs').rmSync('.local/e2e',{recursive:true,force:true})" && npx next dev --hostname 127.0.0.1 --port ${PORT}`,
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: false,
     timeout: 180_000,

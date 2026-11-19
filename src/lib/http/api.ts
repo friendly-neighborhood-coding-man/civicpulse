@@ -95,6 +95,29 @@ export async function readJson<S extends ZodType>(
   return schema.parse(parsed);
 }
 
+export async function readFormData(
+  request: Request,
+  maxBytes: number,
+): Promise<FormData> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().startsWith("multipart/form-data")) {
+    throw new ApiError(
+      415,
+      "UNSUPPORTED_MEDIA_TYPE",
+      "multipart/form-data 요청만 처리합니다.",
+    );
+  }
+  const declaredLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new ApiError(413, "PAYLOAD_TOO_LARGE", "업로드 용량이 너무 큽니다.");
+  }
+  try {
+    return await request.formData();
+  } catch {
+    throw new ApiError(400, "BAD_REQUEST", "요청 본문을 읽을 수 없습니다.");
+  }
+}
+
 /**
  * Cookie-authenticated mutations require a same-origin `Origin` header.
  *

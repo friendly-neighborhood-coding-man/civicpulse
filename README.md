@@ -29,21 +29,26 @@ CivicPulse aims to reduce that friction while distinguishing citizen claims, off
 5. Track *user-reported*, *officially confirmed* and *unverified* status separately.
 6. When an applicable waiting period has passed **and substantive new evidence exists**, prepare a reviewable follow-up; never auto-send.
 
-## Current implementation (stage 01 — foundation)
+## Current implementation (stage 02 — report creation)
 
-Working today on `stack/01-foundation`:
+Working today on `stack/02-report-creation`:
 
 - responsive Next.js 16 shell with an honest description of scope and safety boundaries;
 - demo identity switching (signed httpOnly cookie) with seeded citizen/moderator identities;
 - SQLite persistence with versioned migrations, foreign keys and WAL;
+- **private report drafts** from a photo, a district-level location and a short description,
+  with a deterministic, offline draft assistant, an editable draft, an evidence checklist
+  and source-checked official channel guidance;
+- server-side image intake with sharp: real format detection, size/pixel limits,
+  animated-image rejection, EXIF orientation applied and metadata stripped from the
+  working copy; originals stay private and are never served over HTTP;
+- owner-only access to drafts and photos (other users get a 404, not a 403);
 - JSON API conventions: zod validation, same-origin mutation guard, safe error envelope,
   in-process rate limiting;
-- readiness endpoint (`/api/health`) reporting real schema version and assistant mode;
-- Vitest suite over real SQLite, plus Playwright tests in real Chromium.
+- Vitest suite (58 tests) over real SQLite and sharp, plus Playwright tests (7) in real Chromium.
 
-Not implemented yet: report creation, AI draft assistance, redaction, publication,
-community features and follow-ups. The UI marks these as upcoming rather than
-simulating them.
+Not implemented yet: automatic face/plate redaction, publication, community support and
+follow-ups. The UI marks these as upcoming rather than simulating them.
 
 ### Local development
 
@@ -58,12 +63,15 @@ npm test
 Browser E2E (optional, needs a one-off download and sandbox libraries):
 
 ```bash
-npm run e2e:libs     # extracts Chromium's missing .so files + fonts into .local/ (no root)
+npm run e2e:libs     # extracts Chromium's missing .so files + fonts into ~/.cache (no root)
 npm run e2e:install  # downloads Chromium
 npm run e2e          # Playwright suites in e2e/
 ```
 
 Reset local demo data: `npm run db:reset -- --yes`.
+
+Optional visual capture for review: `node scripts/capture.mjs http://127.0.0.1:3000`
+(writes desktop and mobile screenshots to `.local/screenshots/`).
 
 ### Documentation
 

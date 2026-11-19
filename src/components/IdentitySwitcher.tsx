@@ -70,7 +70,7 @@ export default function IdentitySwitcher({
         </label>
         <select
           id="demo-identity"
-          className="h-10 rounded-full border border-line bg-surface px-3 text-sm text-ink"
+          className="h-10 max-w-36 rounded-full border border-line bg-surface px-3 text-sm text-ink sm:max-w-none"
           value={currentUser?.id ?? ""}
           disabled={pendingId !== null}
           onChange={(event) => {
@@ -89,7 +89,7 @@ export default function IdentitySwitcher({
             type="button"
             onClick={() => void signOut()}
             disabled={pendingId !== null}
-            className="h-10 rounded-full border border-line px-3 text-sm text-muted transition hover:border-line-strong hover:text-ink disabled:opacity-50"
+            className="h-10 shrink-0 rounded-full border border-line px-3 text-sm whitespace-nowrap text-muted transition hover:border-line-strong hover:text-ink disabled:opacity-50"
           >
             나가기
           </button>
