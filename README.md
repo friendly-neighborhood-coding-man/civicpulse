@@ -29,9 +29,9 @@ CivicPulse aims to reduce that friction while distinguishing citizen claims, off
 5. Track *user-reported*, *officially confirmed* and *unverified* status separately.
 6. When an applicable waiting period has passed **and substantive new evidence exists**, prepare a reviewable follow-up; never auto-send.
 
-## Current implementation (stage 04 — community and tracking)
+## Current implementation (stage 05 — follow-up workflow)
 
-Working today on `stack/04-community`:
+Working today on `stack/05-followup`:
 
 - responsive Next.js 16 shell with an honest description of scope and safety boundaries;
 - demo identity switching (signed httpOnly cookie) with seeded citizen/moderator identities;
@@ -60,17 +60,22 @@ Working today on `stack/04-community`:
   citizen claims (owner only) and mock data are shown separately;
 - a public feed at `/issues` listing published issues with support counts and official
   status;
+- **follow-up preparation** for the owner: observable eligibility (waiting period,
+  newly approved evidence, no official resolution, cooldown), a deterministic draft
+  that keeps official status and citizen claims separate, and explicit human approval
+  before the citizen submits it through the verified channel themselves — the app has
+  no submission path;
 - owner-only access to drafts and photos (other users get a 404, not a 403);
 - JSON API conventions: zod validation, same-origin mutation guard, safe error envelope,
   in-process rate limiting;
-- Vitest suite (89 tests) over real SQLite, sharp, redaction pixels and moderation
-  transitions, plus Playwright tests (12) in real Chromium.
+- Vitest suite (95 tests) over real SQLite, sharp, redaction pixels, moderation
+  transitions and follow-up eligibility, plus Playwright tests (14) in real Chromium.
 
-Not implemented yet: verified automatic face/plate detection and follow-up requests.
-The UI marks follow-ups as the next step rather than simulating them. Redaction is
-manual and labelled as such, and evidence photos are reviewed by a person because no
-automatic evidence redaction exists. The optional browser face detector is experimental
-and unavailable in headless Chromium.
+Not implemented yet: verified automatic face/plate detection, model-generated drafting,
+file export and submission tracking. Redaction is manual and labelled as such, evidence
+photos are reviewed by a person because no automatic evidence redaction exists, and the
+follow-up draft is a deterministic template. The optional browser face detector is
+experimental and unavailable in headless Chromium.
 
 ### Local development
 

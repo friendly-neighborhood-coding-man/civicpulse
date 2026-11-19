@@ -87,11 +87,17 @@ export function getAssistantMode(): AssistantMode {
   return process.env.CIVICPULSE_AI_MODE === "openai" ? "openai" : "mock";
 }
 
-/** Illustrative demo waiting period before a follow-up can be drafted. */
+/**
+ * Illustrative demo waiting period before a follow-up can be drafted.
+ *
+ * The default is 14 days. `0` is allowed so an end-to-end demo can exercise the
+ * flow immediately; it is a demo setting, not a recommendation, and the UI always
+ * prints the configured value.
+ */
 export function getFollowupWaitingDays(): number {
   const parsed = Number.parseInt(process.env.CIVICPULSE_FOLLOWUP_WAITING_DAYS ?? "", 10);
   if (!Number.isFinite(parsed)) return 14;
-  return Math.min(Math.max(parsed, 1), 90);
+  return Math.min(Math.max(parsed, 0), 90);
 }
 
 /** Cooldown that prevents repeated follow-up drafts for one report. */
