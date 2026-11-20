@@ -1,7 +1,7 @@
 # CivicPulse — handoff
 
-Latest verified head: `stack/08-takedown-and-followup` — code head `f8a353b`, plus the
-docs commit containing this file (`git log -1` on the branch). Baseline was
+Latest verified head: `stack/09-review-corrections` (`git log -1` on the branch; the
+review-correction commit precedes the docs commit containing this file). Baseline was
 `stack/06-delivery` at `280b590`; `c1a9782` is its parent, not a divergent head.
 
 Date: 2026-11-19. Repository: <https://github.com/friendly-neighborhood-coding-man/civicpulse>.
@@ -19,7 +19,8 @@ contact fabricated, nothing deployed, no repository setting changed.
 | 05 Follow-up workflow | `stack/05-followup` | `stack/04-community` | `b1cd7c7` |
 | 06 Demo & Toss readiness | `stack/06-delivery` | `stack/05-followup` | `280b590` |
 | 07 Security hardening | `stack/07-security-hardening` | `stack/06-delivery` | `b380411` |
-| 08 Takedown & follow-up | `stack/08-takedown-and-followup` | `stack/07-security-hardening` | `f8a353b` + docs commit |
+| 08 Takedown & follow-up | `stack/08-takedown-and-followup` | `stack/07-security-hardening` | `aed422f` |
+| 09 Review corrections | `stack/09-review-corrections` | `stack/08-takedown-and-followup` | `git log -1` |
 
 **Why no Draft PRs:** this sandbox has no authenticated GitHub CLI or token
 (`gh auth status` → not logged in; no `GITHUB_*`/`GH_TOKEN`). Branch pushes work
@@ -58,8 +59,14 @@ gh pr create --draft --base stack/07-security-hardening --head stack/08-takedown
   public page, public photo and evidence photos immediately (transaction, then files),
   keep the audit record, and are idempotent.
 
-See `docs/ACCEPTANCE_REVIEW.md` for the defect table, reproductions and resolved/open
-findings.
+Stage 09 addresses the independent review on PRs #8/#9: portal-domain checks are no
+longer presented as case verification, follow-ups use only the latest official status
+and require an explicit acknowledgement of a resolution claim, failed post-withdrawal
+deletions are durably queued and retried, and the text token is documented and exposed
+as an unsigned fingerprint. See `docs/REVIEW_CORRECTIONS.md`.
+
+See `docs/ACCEPTANCE_REVIEW.md` for the original defect table, reproductions and
+resolved/open findings.
 
 ## Checks actually run (stage 08 head)
 
@@ -67,9 +74,9 @@ findings.
 |---|---|
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS (0 errors/warnings) |
-| `npm test` (Vitest) | PASS — 118 tests / 20 files |
+| `npm test` (Vitest) | PASS — 124 tests / 21 files |
 | `npm run build` | PASS — production build |
-| `npm run e2e` (Playwright, Chromium, `next start`, fresh `.local/e2e`) | PASS — 16 tests |
+| `npm run e2e` (Playwright, Chromium, `next start`, fresh `.local/e2e`) | PASS — 17 tests |
 | Visual review | privacy text panel (1280px and 390px), public provenance panel, withdrawn owner page |
 
 The Chromium run executed: honest home/health; identity switch/sign-out; foreign
@@ -117,7 +124,7 @@ assumptions, not measurements.
 ## Recommended next actions
 
 1. Create the eight Draft PRs with the commands above and review in stack order.
-2. Read `docs/ACCEPTANCE_REVIEW.md`; decide whether the remaining risks are acceptable
+2. Read `docs/REVIEW_CORRECTIONS.md`; decide whether the remaining risks are acceptable
    for a demo.
 3. Choose a real database and Node hosting, replace demo auth, and add account
    deletion/export before any public pilot.

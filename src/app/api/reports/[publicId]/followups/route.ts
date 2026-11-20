@@ -22,6 +22,8 @@ export async function GET(_request: Request, context: RouteContext) {
  *
  * This never sends anything. It refuses when the waiting period, new-evidence or
  * cooldown conditions are not met, and returns the reasons so the UI can explain.
+ * A moderator-recorded "resolved" claim is not verified case resolution; it
+ * requires `acknowledgeRecordedResolution: true` rather than blocking silently.
  */
 export async function POST(request: Request, context: RouteContext) {
   return withApi(async () => {
@@ -34,7 +36,21 @@ export async function POST(request: Request, context: RouteContext) {
       message: "후속 초안 요청이 너무 많습니다.",
     });
 
-    const result = requestFollowup(getDb(), user, publicId);
+    // The only body field is an explicit acknowledgement of a *recorded*
+    // resolution claim. Absent or malformed bodies simply mean "not acknowledged".
+    let acknowledgeRecordedResolution = false;
+    try {
+      const raw = (await request.json()) as {
+        acknowledgeRecordedResolution?: unknown;
+      } | null;
+      acknowledgeRecordedResolution = raw?.acknowledgeRecordedResolution === true;
+    } catch {
+      acknowledgeRecordedResolution = false;
+    }
+
+    const result = requestFollowup(getDb(), user, publicId, new Date(), {
+      acknowledgeRecordedResolution,
+    });
     return jsonOk({ ...result, submittedToAgency: false }, { status: 201 });
   });
 }

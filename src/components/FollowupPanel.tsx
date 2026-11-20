@@ -33,6 +33,9 @@ export default function FollowupPanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // A recorded "resolved" is a claim, not verified case resolution. It must be
+  // acknowledged explicitly instead of silently blocking the citizen.
+  const [resolutionAck, setResolutionAck] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -58,7 +61,13 @@ export default function FollowupPanel({
     try {
       const response =
         action === "create"
-          ? await fetch(`/api/reports/${publicId}/followups`, { method: "POST" })
+          ? await fetch(`/api/reports/${publicId}/followups`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                acknowledgeRecordedResolution: resolutionAck,
+              }),
+            })
           : await fetch(`/api/followups/${followupId}`, {
               method: "POST",
               headers: { "content-type": "application/json" },
@@ -101,6 +110,11 @@ export default function FollowupPanel({
   const active =
     data?.followups.find((item) => item.status !== "discarded") ?? null;
   const latestDiscarded = data?.followups.find((item) => item.status === "discarded");
+  // The resolution gate is the only remaining blocker: the citizen can decide
+  // to proceed by acknowledging it. Other blockers need real changes first.
+  const onlyResolutionGate =
+    data.eligibility.requiresResolutionAcknowledgement &&
+    data.eligibility.reasons.length === 1;
 
   return (
     <section className="card mt-6 p-6" aria-labelledby="followup-heading">
@@ -271,6 +285,32 @@ export default function FollowupPanel({
                       </li>
                     ))}
                   </ul>
+                  {data.eligibility.requiresResolutionAcknowledgement ? (
+                    <label className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed text-ink-soft">
+                      <input
+                        type="checkbox"
+                        checked={resolutionAck}
+                        onChange={(event) => setResolutionAck(event.target.checked)}
+                        className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+                      />
+                      <span>
+                        운영자가 &lsquo;해결됨&rsquo;으로 기록한 것은 확인했습니다.
+                        이는 공식 포털 도메인을 인용한 기록일 뿐 사건 해결이
+                        확인된 것은 아니며, 재발·미해결 상태를 직접 확인했으므로
+                        후속 요청을 준비하겠습니다.
+                      </span>
+                    </label>
+                  ) : null}
+                  {onlyResolutionGate ? (
+                    <button
+                      type="button"
+                      disabled={busy || !resolutionAck}
+                      onClick={() => void act("create")}
+                      className="mt-3 inline-flex h-10 items-center rounded-full bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:opacity-50"
+                    >
+                      {busy ? "만드는 중…" : "후속 요청 초안 만들기"}
+                    </button>
+                  ) : null}
                   {latestDiscarded ? (
                     <p className="mt-2 text-[11px] text-muted">
                       이전 초안은 {formatDateTime(latestDiscarded.createdAt)}에

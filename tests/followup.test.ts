@@ -212,7 +212,9 @@ describe("follow-up drafts", () => {
       name: "안전신문고",
       url: "https://www.safetyreport.go.kr/",
     });
-    expect(followup.text).toContain("공식 출처 확인");
+    expect(followup.text).toContain("공식 포털 인용");
+    // The cited portal domain must never be described as case verification.
+    expect(followup.text).toContain("사건 확인 아님");
     expect(followup.text).toContain("시민 주장");
     expect(followup.text).toContain("CivicPulse가 자동으로 전송하지 않습니다");
     // No invented contact details: only the registry URL, no email or phone.

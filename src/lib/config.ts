@@ -105,6 +105,23 @@ export function getFollowupCooldownDays(): number {
   return 7;
 }
 
+/**
+ * Demo identity switches allowed per minute in one process.
+ *
+ * This limits only the *demo* sign-in switcher, which is not authentication.
+ * Scripted demos and the browser suite legitimately switch accounts many times
+ * in under a minute, so the cap is configurable; it stays bounded (max 600) and
+ * is never disabled by configuration.
+ */
+export function getSessionSwitchLimit(): number {
+  const parsed = Number.parseInt(
+    process.env.CIVICPULSE_SESSION_SWITCH_LIMIT ?? "",
+    10,
+  );
+  if (!Number.isFinite(parsed)) return 30;
+  return Math.min(Math.max(parsed, 1), 600);
+}
+
 export function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }

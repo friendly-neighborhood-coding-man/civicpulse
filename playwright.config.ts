@@ -31,6 +31,9 @@ export default defineConfig({
       // 0 so the demo can exercise the follow-up flow immediately; the shipped
       // default is 14 days and the UI always prints the configured value.
       CIVICPULSE_FOLLOWUP_WAITING_DAYS: "0",
+      // The suite legitimately switches demo accounts many times in under a
+      // minute; this only raises the demo switcher's own anti-abuse cap.
+      CIVICPULSE_SESSION_SWITCH_LIMIT: "200",
     },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

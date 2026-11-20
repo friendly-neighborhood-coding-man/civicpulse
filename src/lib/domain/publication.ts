@@ -5,8 +5,10 @@ import { internalId, isPublicId } from "../ids.ts";
 import { MAX_MASKS, type MaskRect } from "../privacy/masks.ts";
 import {
   TEXT_PRIVACY_LIMITATION,
+  TEXT_REVIEW_TOKEN_IS_SIGNED,
+  TEXT_REVIEW_TOKEN_KIND,
   TEXT_REVIEW_VERSION,
-  publicTextReviewToken,
+  publicTextFingerprint,
   scanPublicText,
   summarizeFindings,
   toTextReviewAudit,
@@ -31,7 +33,10 @@ export type PublishAck = {
   textReviewed: boolean;
   /** Required when the heuristic text scan reported candidates. */
   textFindingsReviewed: boolean;
-  /** Token of the exact title/body the acknowledgements refer to. */
+  /**
+   * Content fingerprint of the exact title/body the acknowledgements refer to.
+   * Unsigned: it only detects accidental staleness after an edit.
+   */
   textToken: string;
 };
 
@@ -53,8 +58,11 @@ export type PublicTextReview = {
   summary: TextFindingSummary;
   limitation: string;
   version: string;
-  /** Changes whenever the published text changes. */
+  /** Changes whenever the published text changes; detects stale acknowledgements. */
   token: string;
+  /** Honest description of the token: unsigned content fingerprint. */
+  tokenKind: typeof TEXT_REVIEW_TOKEN_KIND;
+  signed: typeof TEXT_REVIEW_TOKEN_IS_SIGNED;
 };
 
 export function buildPublicTextReview(
@@ -68,7 +76,9 @@ export function buildPublicTextReview(
     summary: summarizeFindings(findings),
     limitation: TEXT_PRIVACY_LIMITATION,
     version: TEXT_REVIEW_VERSION,
-    token: publicTextReviewToken(row),
+    token: publicTextFingerprint(row),
+    tokenKind: TEXT_REVIEW_TOKEN_KIND,
+    signed: TEXT_REVIEW_TOKEN_IS_SIGNED,
   };
 }
 
@@ -125,7 +135,7 @@ export async function publishReport(
   }
   // The acknowledgement must refer to the text that is stored right now. Without
   // this, a checkbox ticked before an edit would silently approve the new text.
-  if (input.ack.textToken !== publicTextReviewToken(row)) {
+  if (input.ack.textToken !== publicTextFingerprint(row)) {
     throw conflict(
       "확인한 글과 지금 공개할 글이 다릅니다. 본문을 다시 읽고 확인해 주세요.",
       { textReview: buildPublicTextReview(row) },

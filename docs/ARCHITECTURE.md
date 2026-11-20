@@ -216,7 +216,7 @@ moderator assertion with a government record. Migration v6 rebuilds the table:
 
 | kind | who | requirement | public label |
 |---|---|---|---|
-| `official_source` | moderator | host in the curated registry (안전신문고/국민신문고), https, no userinfo | 공식 출처 확인 · 운영자 입력 |
+| `official_source` | moderator | host in the curated registry (안전신문고/국민신문고), https, no userinfo | 공식 포털 인용 · 운영자 입력 |
 | `moderator_claim` | moderator | any https link or none | 운영자 기록 · 미검증 |
 | `user_claim` | report owner | no link | 시민 주장 |
 | `mock` | moderator | no link | 모의 데이터 |
@@ -225,11 +225,17 @@ No authenticated government integration exists (`AUTHENTICATED_OFFICIAL_INTEGRAT
 false`); nothing is labelled as one. The host check uses exact/suffix matching, so
 `https://www.safetyreport.go.kr.evil.example/`, `https://evilsafetyreport.go.kr/` and
 `https://www.safetyreport.go.kr@evil.example/` are all rejected. Only
-`official_source` feeds `officialStatus`, the feed chip, the follow-up "resolved"
-suppression, and the draft's official section; unverified moderator notes are carried
-into drafts as labelled claims. Legacy `official` rows are reclassified by the same
-rule during migration, so an overstated row becomes 미검증 rather than keeping the
-old claim.
+`official_source` feeds `officialStatus`, the feed chip, and the draft's official
+section; unverified moderator notes are carried into drafts as labelled claims.
+Legacy `official` rows are reclassified by the same rule during migration, so an
+overstated row becomes 미검증 rather than keeping the old claim.
+
+**Domain verification is not case verification** (stage 09). The check proves only
+that an HTTPS address belongs to a registered portal; it says nothing about the
+specific case, its receipt, its processing state or its resolution, and the cited
+page is never fetched. `IssueDetail.officialReference` therefore carries
+`caseVerified: false`, the panel prints "사건 단위 확인: 안 됨 (도메인만 확인)", and the
+labels say **공식 포털 인용** rather than "공식 확인".
 
 ## Follow-up support and evidence chronology (stage 08)
 
@@ -256,18 +262,39 @@ old claim.
   and private original/working copies remain for the audit trail. See "Known
   limitations" for what is *not* deleted.
 
-## Verification status (stage 08)
+## Review corrections (stage 09)
+
+- **Current recorded status, not any historical one.** Follow-up eligibility reads
+  only the latest `official_source` event. A later `recurred`/`unresolved` clears an
+  older `resolved`, so a citizen is never permanently locked out (the previous rule
+  matched any historical resolution).
+- **A resolution claim needs an explicit decision.** Because a portal citation does
+  not verify resolution, a recorded `resolved` returns
+  `requiresResolutionAcknowledgement: true` instead of silently blocking;
+  `POST .../followups` requires `acknowledgeRecordedResolution: true`, which the
+  owner sets with a disclosure checkbox.
+- **Durable media cleanup.** Migration v8 adds `media_cleanup`; withdrawal enqueues
+  every public/evidence file before commit, attempts deletion, and leaves failures
+  pending with `attempts`/`last_error`. The repeat-withdrawal path retries instead of
+  returning early, `POST /api/moderation/media-cleanup` is the moderator-only
+  reconciliation hook, and `GET /api/health` reports `mediaCleanupPending`. No text,
+  note or personal data is stored in the queue.
+- **The publish token is an unsigned fingerprint.** `publicTextFingerprint` (FNV-1a)
+  detects an edited draft whose acknowledgement is stale. It is not server-issued,
+  signed or proof of review; `tokenKind`/`signed` expose that in the API.
+
+## Verification status (stage 09)
 
 | Check | Result |
 |---|---|
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS |
-| `npm test` | PASS — 118 tests / 20 files |
+| `npm test` | PASS — 124 tests / 21 files |
 | `npm run build` | PASS (production build used by E2E) |
-| `npm run e2e` | PASS — 16 Chromium tests against `next start` |
+| `npm run e2e` | PASS — 17 Chromium tests against `next start` |
 | Visual review | privacy text panel (desktop 1280px, mobile 390px), public provenance panel, withdrawn owner page |
 
-## Known limitations (stage 08)
+## Known limitations (stage 09)
 
 - Text scanning is pattern-based: it misses names without honorifics, obfuscated
   digits, unusual addresses, and can false-positive. Human review is the control.
@@ -276,6 +303,9 @@ old claim.
 - Withdrawal removes public visibility and app-served media, not every copy: browser
   caches, screenshots, search engines, backups and CDN logs are outside this app.
   There is no scheduled purge, legal hold, account deletion or export.
+- A media key that can never be deleted stays pending with its error visible; there
+  is no terminal abandon state or alerting, so an operator must inspect
+  `mediaCleanupPending` (basis for the stage-10 retention work).
 - Removed reports keep private originals, masks and timeline rows indefinitely.
 - Demo cookie identity, single-node SQLite, local-filesystem media and an in-process
   rate limiter remain the deployment boundaries (no edge/Workers target).

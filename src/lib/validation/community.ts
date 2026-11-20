@@ -25,7 +25,9 @@ export const STATUS_LABEL: Record<StatusValue, string> = {
  * Provenance kinds. These are deliberately *not* interchangeable:
  *
  * - `official_source`: a human moderator cited a page on a verified official
- *   portal domain. Still a human assertion; the product has no government API.
+ *   portal *domain*. This does not verify the specific case, its receipt or its
+ *   resolution: the product has no government API and never fetches the page.
+ *   The UI therefore says "portal citation", never "officially confirmed".
  * - `moderator_claim`: a moderator recorded something with no source or with an
  *   unverified source. Never rendered as government confirmation.
  * - `user_claim`: the report owner's own observation.
@@ -43,7 +45,7 @@ export const STATUS_KINDS = [
 export type StatusKind = (typeof STATUS_KINDS)[number];
 
 export const KIND_LABEL: Record<StatusKind, string> = {
-  official_source: "공식 출처 확인 · 운영자 입력",
+  official_source: "공식 포털 인용 · 운영자 입력",
   moderator_claim: "운영자 기록 · 미검증",
   user_claim: "시민 주장",
   mock: "모의 데이터",
@@ -51,7 +53,7 @@ export const KIND_LABEL: Record<StatusKind, string> = {
 
 export const KIND_HINT: Record<StatusKind, string> = {
   official_source:
-    "확인된 공식 포털(안전신문고·국민신문고) 주소와 함께 기록합니다. 정부 시스템과 자동으로 연동된 기록은 아닙니다.",
+    "등록된 공식 포털(안전신문고·국민신문고)의 주소를 인용해 기록합니다. 도메인만 확인하며, 해당 사건의 접수·처리·해결 여부나 인용한 페이지의 내용은 확인하지 않습니다. 정부 시스템과 자동 연동도 없습니다.",
   moderator_claim:
     "공식 포털 밖의 자료이거나 출처가 없을 때 사용합니다. 공개 화면에서 미검증 운영자 기록으로 표시됩니다.",
   user_claim: "제보 작성자 본인의 관찰입니다. 사실 확인으로 표시되지 않습니다.",
@@ -94,7 +96,7 @@ export const statusEventSchema = z
       context.addIssue({
         code: "custom",
         path: ["sourceUrl"],
-        message: "공식 출처 확인에는 출처 주소가 필요합니다.",
+        message: "공식 포털 인용에는 출처 주소가 필요합니다.",
       });
     }
     if (
