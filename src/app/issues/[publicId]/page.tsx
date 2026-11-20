@@ -202,9 +202,15 @@ export default async function PublicIssuePage({ params }: PageProps) {
             <h2 className="text-sm font-semibold text-ink">이 기록의 상태</h2>
             <dl className="mt-3 space-y-2 text-xs">
               <div className="flex justify-between gap-3">
-                <dt className="text-muted">공식 출처 확인</dt>
+                <dt className="text-muted">공식 포털 인용</dt>
                 <dd className="text-right font-medium text-ink">
                   {issue.officialStatus ? STATUS_LABEL[issue.officialStatus] : "없음"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">사건 단위 확인</dt>
+                <dd className="text-right font-medium text-warn">
+                  {issue.officialReference ? "안 됨 (도메인만 확인)" : "해당 없음"}
                 </dd>
               </div>
               <div className="flex justify-between gap-3">
@@ -237,9 +243,11 @@ export default async function PublicIssuePage({ params }: PageProps) {
               </div>
             </dl>
             <p className="mt-3 text-[11px] leading-relaxed text-muted">
-              공식 출처 확인은 운영자가 확인된 공식 포털 주소와 함께 기록한 경우에만
-              표시됩니다. 정부 시스템과 자동으로 연동된 기록이 아니며, 나머지 운영자
-              기록은 미검증으로 구분됩니다. 시민 주장은 작성자의 관찰입니다.
+              &lsquo;공식 포털 인용&rsquo;은 운영자가 등록된 공식 포털 도메인의 주소를
+              인용해 기록한 경우에만 표시됩니다. 도메인만 확인하며, 해당 사건의 접수·
+              처리·해결 여부나 인용한 페이지의 내용은 확인하지 않습니다. 정부 시스템과
+              자동으로 연동된 기록도 아닙니다. 나머지 운영자 기록은 미검증으로
+              구분되고, 시민 주장은 작성자의 관찰입니다.
             </p>
             {officialEvent ? (
               <a
@@ -248,7 +256,7 @@ export default async function PublicIssuePage({ params }: PageProps) {
                 rel="noopener noreferrer nofollow"
                 className="mt-3 inline-block text-[11px] font-medium text-accent-strong underline underline-offset-2"
               >
-                공식 출처 열기 ↗
+                인용한 포털 열기 ↗
               </a>
             ) : null}
             {issue.officialSourceCheckedAt ? (

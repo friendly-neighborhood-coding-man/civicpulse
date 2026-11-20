@@ -31,7 +31,7 @@ async function createDraftViaApi(page: Page, baseURL: string, description: strin
   return body.data.report.publicId as string;
 }
 
-/** Server-issued token binding the publish acknowledgement to exact text. */
+/** Unsigned content fingerprint binding the publish acknowledgement to exact text. */
 async function fetchTextToken(page: Page, publicId: string): Promise<string> {
   const response = await page.request.get(`/api/reports/${publicId}/privacy/text`);
   expect(response.status()).toBe(200);

@@ -5,6 +5,7 @@ import {
   getSessionUser,
   setSessionUser,
 } from "@/lib/auth/session";
+import { getSessionSwitchLimit } from "@/lib/config";
 import { getDb } from "@/lib/db/connection";
 import { DEMO_USERS } from "@/lib/db/seed";
 import { listUsers } from "@/lib/domain/users";
@@ -27,7 +28,10 @@ export async function GET() {
 export async function POST(request: Request) {
   return withApi(async () => {
     assertSameOrigin(request);
-    enforceRateLimit("session:switch", { limit: 30, windowMs: 60_000 });
+    enforceRateLimit("session:switch", {
+      limit: getSessionSwitchLimit(),
+      windowMs: 60_000,
+    });
     const body = await readJson(request, switchSchema);
     if (!DEMO_IDS.has(body.userId)) {
       throw new ApiError(404, "NOT_FOUND", "존재하지 않는 데모 사용자입니다.");

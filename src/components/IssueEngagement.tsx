@@ -316,10 +316,10 @@ export default function IssueEngagement({
         <section className="rounded-2xl border border-warn/30 bg-warn-soft/40 p-5">
           <h2 className="text-sm font-semibold text-ink">운영자: 상태 기록</h2>
           <p className="mt-2 text-xs leading-relaxed text-warn">
-            공식 포털(안전신문고·국민신문고) 주소를 댈 수 있을 때만 &lsquo;공식 출처
-            확인&rsquo;으로 기록합니다. 그 밖의 자료는 &lsquo;운영자 기록(미검증)&rsquo;으로
-            남기며, 공개 화면에서도 미검증으로 표시됩니다. 정부 시스템과 자동으로
-            연동되는 기록은 없습니다.
+            등록된 공식 포털(안전신문고·국민신문고) 주소를 인용할 때만 &lsquo;공식
+            포털 인용&rsquo;으로 기록합니다. 도메인만 확인하며, 해당 사건의 접수·처리·
+            해결 여부는 확인하지 않습니다. 그 밖의 자료는 &lsquo;운영자
+            기록(미검증)&rsquo;으로 남기며, 공개 화면에서도 미검증으로 표시됩니다.
           </p>
           <div className="mt-3 space-y-3">
             <select
@@ -332,7 +332,7 @@ export default function IssueEngagement({
               }
               className="h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink"
             >
-              <option value="official_source">공식 출처 확인 · 운영자 입력</option>
+              <option value="official_source">공식 포털 인용 · 운영자 입력</option>
               <option value="moderator_claim">운영자 기록 · 미검증</option>
             </select>
             <p className="text-[11px] leading-relaxed text-ink-soft">

@@ -62,11 +62,11 @@ export default function IssuesFeedPage() {
                 <div className="flex flex-wrap items-center gap-2 text-[11px]">
                   {issue.officialStatus ? (
                     <span className="rounded-full border border-accent/30 bg-accent-soft px-2 py-1 font-semibold text-accent-strong">
-                      공식 출처 확인 · {STATUS_LABEL[issue.officialStatus]}
+                      포털 인용 · {STATUS_LABEL[issue.officialStatus]}
                     </span>
                   ) : (
                     <span className="rounded-full border border-info/25 bg-info-soft px-2 py-1 font-semibold text-info">
-                      공식 출처 확인 없음
+                      포털 인용 없음
                     </span>
                   )}
                   <span className="text-muted">

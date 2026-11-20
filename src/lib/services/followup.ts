@@ -95,8 +95,8 @@ export function generateFollowupDraft(input: FollowupInput): FollowupBody {
       `${input.areaLabel}에서 ${formatDate(input.publishedAt)}에 공개된 시민 제보입니다.`,
       `공개 후 ${input.ageDays}일이 지났고, ${evidenceSummary}`,
       input.official
-        ? `마지막으로 확인된 공식 출처 기록은 '${STATUS_LABEL[input.official.status]}'입니다. 정부 시스템과 자동 연동된 기록은 아닙니다.`
-        : "아직 공식 포털 출처와 함께 확인된 상태가 없습니다.",
+        ? `마지막으로 기록된 공식 포털 인용 상태는 '${STATUS_LABEL[input.official.status]}'입니다. 포털 도메인을 인용한 운영자 입력이며, 해당 사건의 접수·처리·해결을 확인한 기록은 아닙니다.`
+        : "아직 공식 포털을 인용한 상태 기록이 없습니다.",
       input.supportCount > 0
         ? `공개 화면에서 지지 ${input.supportCount}명이 확인되었습니다. 이는 지역 관심의 표시이며, 제보 내용의 사실 여부를 판정하지 않습니다.`
         : "공개 화면에 아직 지지 표시는 없습니다. 지지 수는 사실 판정이 아닙니다.",
@@ -104,10 +104,10 @@ export function generateFollowupDraft(input: FollowupInput): FollowupBody {
     currentSituation: [
       `현황: ${input.title}`,
       input.official
-        ? `공식 출처 확인(${formatDate(input.official.createdAt)}${
-            input.official.sourceHost ? `, ${input.official.sourceHost}` : ""
-          }): ${input.official.note}`
-        : "공식 출처 확인: 아직 없습니다.",
+        ? `공식 포털 인용(사건 확인 아님, ${STATUS_LABEL[input.official.status]}, ${formatDate(
+            input.official.createdAt,
+          )}${input.official.sourceHost ? `, ${input.official.sourceHost}` : ""}): ${input.official.note}`
+        : "공식 포털 인용: 아직 없습니다.",
       ...input.claims.map(
         (claim) =>
           `${KIND_LABEL[claim.kind] ?? KIND_LABEL.user_claim}(${formatDate(

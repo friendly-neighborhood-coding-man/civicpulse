@@ -51,7 +51,8 @@ async function publishIssue(page: Page, baseURL: string): Promise<string> {
 }
 
 async function addApprovedEvidence(page: Page, publicId: string, baseURL: string) {
-  await switchUser(page, "demo-hana");
+  // Distinct uploader from the other specs: the real limit is 3 per account/hour.
+  await switchUser(page, "demo-jun");
   const uploaded = await page.request.post(
     `/api/public/reports/${publicId}/evidence`,
     {
@@ -124,6 +125,11 @@ test.describe("withdrawal and takedown", () => {
       `/api/public/evidence/${evidenceId}/photo`,
     );
     expect(evidencePhoto.status()).toBe(404);
+
+    // Deletion accounting is observable and clean: nothing is left to retry.
+    const health = await anonPage.request.get("/api/health");
+    expect(health.status()).toBe(200);
+    expect((await health.json()).data.mediaCleanupPending).toBe(0);
 
     // The feed no longer lists it.
     await anonPage.goto(`${baseURL}/issues`);

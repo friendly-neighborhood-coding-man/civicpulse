@@ -17,6 +17,7 @@ import {
 } from "./community.ts";
 import { getPublishedReportRow } from "./publication.ts";
 import type { PublicUser } from "./users.ts";
+import type { StatusValue } from "../validation/community.ts";
 
 export type FollowupStatus = "draft" | "approved" | "discarded";
 
@@ -50,6 +51,15 @@ export type FollowupView = {
   notSubmitted: true;
 };
 
+export type RecordedResolution = {
+  status: Extract<StatusValue, "resolved">;
+  createdAt: string;
+  sourceHost: string | null;
+  sourceCheckedAt: string | null;
+  /** Always false: the cited portal domain does not verify this case. */
+  caseVerified: false;
+};
+
 export type FollowupEligibility = {
   eligible: boolean;
   reasons: string[];
@@ -58,6 +68,13 @@ export type FollowupEligibility = {
   ageDays: number;
   approvedEvidenceCount: number;
   newEvidenceCount: number;
+  /**
+   * A moderator-recorded "resolved" claim that the citizen must explicitly
+   * acknowledge. It is a claim, not verified case resolution, and it never
+   * blocks after a later `recurred`/`unresolved` event.
+   */
+  resolutionRecorded: RecordedResolution | null;
+  requiresResolutionAcknowledgement: boolean;
   latest: {
     id: string;
     status: FollowupStatus;
@@ -165,6 +182,7 @@ export function getFollowupEligibility(
   db: Db,
   reportId: string,
   now: Date = new Date(),
+  options: { acknowledgeRecordedResolution?: boolean } = {},
 ): FollowupEligibility {
   const report = one<{ published_at: string | null; state: string }>(
     db,
@@ -181,13 +199,29 @@ export function getFollowupEligibility(
   const reasons: string[] = [];
 
   const events = listStatusEvents(db, reportId);
-  // Only a verified official-portal citation counts as resolution. A moderator's
-  // unverified note must not silently disable the citizen's follow-up path.
-  const officialResolved = [...events]
-    .reverse()
-    .find((event) => event.kind === "official_source" && event.status === "resolved");
-  if (officialResolved) {
-    reasons.push("공식 확인으로 해결된 제보입니다. 후속 요청이 필요하지 않습니다.");
+  // Only the LATEST portal citation describes the current recorded status. An
+  // older `resolved` must not outlive a later `recurred`/`unresolved`: that is
+  // how a permanently suppressed follow-up path used to happen.
+  const latestOfficial =
+    [...events].reverse().find((event) => event.kind === "official_source") ?? null;
+  const resolutionRecorded: RecordedResolution | null =
+    latestOfficial?.status === "resolved"
+      ? {
+          status: "resolved",
+          createdAt: latestOfficial.created_at,
+          sourceHost: latestOfficial.source_host,
+          sourceCheckedAt: latestOfficial.source_checked_at,
+          caseVerified: false,
+        }
+      : null;
+  const requiresResolutionAcknowledgement = Boolean(resolutionRecorded);
+  // A moderator's resolution claim is not verified case resolution, so it may
+  // not silently disable the citizen's path. It requires an explicit, recorded
+  // decision to proceed; any later recurred/unresolved event removes it.
+  if (resolutionRecorded && !options.acknowledgeRecordedResolution) {
+    reasons.push(
+      "운영자가 '해결됨'으로 기록했습니다. 공식 포털 도메인 인용일 뿐 사건 해결이 확인된 것은 아닙니다. 그래도 후속 요청을 만들려면 확인이 필요합니다.",
+    );
   }
 
   if (ageDays < waitingDays) {
@@ -230,6 +264,8 @@ export function getFollowupEligibility(
     ageDays,
     approvedEvidenceCount: evidence.length,
     newEvidenceCount: newEvidence.length,
+    resolutionRecorded,
+    requiresResolutionAcknowledgement,
     latest: latest
       ? {
           id: latest.id,
@@ -246,13 +282,14 @@ export function requestFollowup(
   actor: PublicUser,
   publicReportId: string,
   now: Date = new Date(),
+  options: { acknowledgeRecordedResolution?: boolean } = {},
 ): { followup: FollowupView; eligibility: FollowupEligibility } {
   const report = getPublishedReportRow(db, publicReportId);
   if (report.owner_id !== actor.id) {
     throw forbidden("후속 요청은 제보 작성자만 만들 수 있습니다.");
   }
 
-  const eligibility = getFollowupEligibility(db, report.id, now);
+  const eligibility = getFollowupEligibility(db, report.id, now, options);
   if (!eligibility.eligible) {
     throw conflict(eligibility.reasons.join(" "), { reasons: eligibility.reasons });
   }
@@ -327,7 +364,7 @@ export function requestFollowup(
 
   return {
     followup: toView(getFollowupRow(db, id)),
-    eligibility: getFollowupEligibility(db, report.id, now),
+    eligibility: getFollowupEligibility(db, report.id, now, options),
   };
 }
 

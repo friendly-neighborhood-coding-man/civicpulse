@@ -1,6 +1,7 @@
 import type { Db } from "../db/connection.ts";
 import { all, one, run } from "../db/query.ts";
 import {
+  CASE_VERIFICATION,
   OFFICIAL_SOURCE_REJECTION_MESSAGE,
   checkOfficialSourceUrl,
   parseSupportingSourceUrl,
@@ -75,6 +76,18 @@ export type PublicStatusEvent = {
   createdAt: string;
 };
 
+export type OfficialReference = {
+  status: StatusValue;
+  sourceUrl: string | null;
+  sourceHost: string | null;
+  /** Registry as-of date for the cited portal, not when the case was checked. */
+  sourceCheckedAt: string | null;
+  createdAt: string;
+  /** Always false: no case-level verification exists in this product. */
+  caseVerified: false;
+  verification: typeof CASE_VERIFICATION;
+};
+
 export type IssueDetail = PublicReport & {
   supportCount: number;
   supportedByMe: boolean;
@@ -88,6 +101,13 @@ export type IssueDetail = PublicReport & {
   officialCheckedAt: string | null;
   officialSourceHost: string | null;
   officialSourceCheckedAt: string | null;
+  /**
+   * Latest portal citation, with its scope made explicit. A domain check is not
+   * a check of this case, its receipt or its resolution.
+   */
+  officialReference: OfficialReference | null;
+  /** Always false; exposed so no consumer can imply case verification. */
+  officialCaseVerified: false;
   /** Latest moderator note with no verified official source. */
   latestModeratorClaim: PublicStatusEvent | null;
   /** Latest status the reporter claims (never treated as verified). */
@@ -484,6 +504,18 @@ export function getIssueDetail(
     officialCheckedAt: official?.created_at ?? null,
     officialSourceHost: official?.source_host ?? null,
     officialSourceCheckedAt: official?.source_checked_at ?? null,
+    officialReference: official
+      ? {
+          status: official.status,
+          sourceUrl: official.source_url,
+          sourceHost: official.source_host,
+          sourceCheckedAt: official.source_checked_at,
+          createdAt: official.created_at,
+          caseVerified: false,
+          verification: CASE_VERIFICATION,
+        }
+      : null,
+    officialCaseVerified: false,
     latestModeratorClaim: moderatorClaim
       ? toPublicStatusEvent(moderatorClaim)
       : null,

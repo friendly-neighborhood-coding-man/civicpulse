@@ -171,14 +171,23 @@ export function toTextReviewAudit(findings: TextFinding[]): {
 }
 
 /**
- * Stable identifier for one exact public text.
+ * Stable content fingerprint for one exact public text.
  *
+ * WHAT IT IS: a deterministic 32-bit FNV-1a hash of `version\0title\0description`.
  * The publish acknowledgement is bound to this value, so a checkbox ticked for
- * an earlier version of the draft cannot authorise a later edit. It is a
- * consistency token, not a secret or a signature: use FNV-1a so the same
- * function works on the server and in the browser bundle.
+ * an earlier version of the draft cannot authorise a later edit.
+ *
+ * WHAT IT IS NOT: it is **not** server-issued, **not** signed or MACed, and it
+ * is **not** proof that a human read anything. It is computed from text the
+ * client already has, so anyone can compute it too; its only guarantee is
+ * accidental-staleness detection. (Forging it gains nothing, because the server
+ * recomputes it from the stored draft and the real control is the stored
+ * `text_reviewed_at` acknowledgement.)
+ *
+ * If tamper evidence is ever required, replace this with an HMAC over the text
+ * using a server-held key, and change `TEXT_REVIEW_TOKEN_KIND` accordingly.
  */
-export function publicTextReviewToken(input: {
+export function publicTextFingerprint(input: {
   title: string;
   description: string;
 }): string {
@@ -190,6 +199,14 @@ export function publicTextReviewToken(input: {
   }
   return `${TEXT_REVIEW_VERSION}-${hash.toString(16).padStart(8, "0")}`;
 }
+
+/** Backwards-compatible alias; the value is a fingerprint, not a signed token. */
+export const publicTextReviewToken = publicTextFingerprint;
+
+export const TEXT_REVIEW_TOKEN_KIND = "unsigned-content-fingerprint" as const;
+
+/** Kept explicit so no caller can describe this as a tamper-proof token. */
+export const TEXT_REVIEW_TOKEN_IS_SIGNED = false;
 
 export const TEXT_PRIVACY_LIMITATION =
   "자동 검사는 전화번호·이메일 등 정해진 형태만 찾는 보조 수단입니다. 이름, 주소, 손으로 쓴 숫자는 놓칠 수 있으므로 공개할 글을 직접 읽고 확인해야 합니다.";

@@ -131,6 +131,52 @@ test.describe("follow-up workflow", () => {
     expect(foreignCreate.status()).toBe(403);
   });
 
+  test("treats a recorded resolution as a claim, not a permanent block", async ({
+    page,
+    baseURL,
+  }) => {
+    await switchUser(page, "demo-minji");
+    const publicId = await publishIssue(page, baseURL!);
+
+    // A neighbour's approved evidence exists, so only the resolution claim is
+    // left between the owner and a follow-up draft. Use a distinct uploader:
+    // the real per-account limit is 3 evidence uploads per hour.
+    await switchUser(page, "demo-jun");
+    const evidenceId = await uploadEvidence(page, publicId, baseURL!);
+    await switchUser(page, "demo-ops");
+    await approveEvidence(page, evidenceId, baseURL!);
+
+    // A moderator cites the portal *homepage* and records "resolved". The host
+    // is valid; the case is not verified. The UI must say so.
+    await page.goto(`/issues/${publicId}`);
+    await page.getByLabel("기록 종류").selectOption("official_source");
+    await page.getByLabel("기록할 상태").selectOption("resolved");
+    await page.getByLabel("출처 주소").fill("https://www.safetyreport.go.kr/");
+    await page.getByLabel("기록 내용").fill("포털에 해결로 표시되어 있었습니다.");
+    await page.getByRole("button", { name: "상태 기록" }).click();
+    await expect(page.getByText(/공식 포털 인용/).first()).toBeVisible();
+
+    await switchUser(page, "demo-minji");
+    await page.goto(`/reports/${publicId}`);
+    await expect(
+      page.getByText(/사건 해결이 확인된 것은 아닙니다/).first(),
+    ).toBeVisible();
+
+    // Creating without the acknowledgement is refused by the route, not the UI.
+    const refused = await page.request.post(`/api/reports/${publicId}/followups`, {
+      headers: { origin: baseURL!, "content-type": "application/json" },
+      data: { acknowledgeRecordedResolution: false },
+    });
+    expect(refused.status()).toBe(409);
+    expect(JSON.stringify(await refused.json())).toContain("해결");
+
+    // The owner decides explicitly, then the draft is created.
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "후속 요청 초안 만들기" }).click();
+    await expect(page.getByText("검토 대기")).toBeVisible();
+    await expect(page.getByText(/사건 확인 아님/).first()).toBeVisible();
+  });
+
   test("explains why a follow-up is not possible yet", async ({ page, baseURL }) => {
     await switchUser(page, "demo-jun");
     const publicId = await publishIssue(page, baseURL!);

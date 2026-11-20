@@ -27,10 +27,12 @@ Two smaller defects found during the review are included:
 
 - New `src/lib/privacy/text.ts`: deterministic, explicitly fallible scan of the exact
   public fields, masked previews, aggregate-only audit.
-- Publication gate: `textReviewed` + a server-issued `textToken` bound to the current
-  title/body; a second acknowledgement when candidates exist. Editing the draft
-  invalidates the old token. Findings are shown with the exact public text and a link
-  back to the editor.
+- Publication gate: `textReviewed` + a `textToken` **content fingerprint** (unsigned
+  FNV-1a, not server-issued) bound to the current title/body; a second acknowledgement
+  when candidates exist. Editing the draft invalidates the old fingerprint. Findings
+  are shown with the exact public text and a link back to the editor.
+  *Correction (stage 09): this file originally called the value "server-issued". It is
+  a consistency check, not proof of review or a tamper-resistant token.*
 - Evidence notes run the same scan and are rejected with an editable message.
 - Migration v6 rebuilds `status_events` with four provenance kinds and `source_host` /
   `source_checked_at`. Legacy `official` rows are reclassified by the new rule.

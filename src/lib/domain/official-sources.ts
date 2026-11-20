@@ -6,8 +6,12 @@ import { OFFICIAL_CHANNELS } from "./channels.ts";
  * Three of the four trust tiers in the product contract are representable here:
  *
  * 1. `official_source` — a human moderator recorded a status and cited a page
- *    on a *verified official portal domain* from the channel registry. The
- *    domain is checkable; the page content is still a human assertion.
+ *    on a *verified official portal domain* from the channel registry. ONLY the
+ *    domain is checked: the page content, the case's existence, its receipt
+ *    number and its resolution are unverified human assertions. Public labels
+ *    must say "portal citation", never "officially confirmed".
+ *    `CASE_VERIFICATION_AVAILABLE` is false because no case-level integration
+ *    exists.
  * 2. `moderator_claim` — a moderator recorded a status with no source, or with
  *    a source outside the registry. Shown as an unverified operator note.
  * 3. `user_claim` / `mock` — the citizen's own observation, or demo data.
@@ -19,6 +23,24 @@ import { OFFICIAL_CHANNELS } from "./channels.ts";
  * `official_source`.
  */
 export const AUTHENTICATED_OFFICIAL_INTEGRATION = false;
+
+/**
+ * What a registry-host check proves, and what it explicitly does not.
+ * Exposed so APIs and docs can state the scope without re-deriving it.
+ */
+export const OFFICIAL_SOURCE_SCOPE = {
+  verifies: "등록된 공식 포털 도메인의 https 주소인지",
+  doesNotVerify: [
+    "해당 사건의 존재·접수 여부",
+    "처리 상태나 해결 여부",
+    "인용한 페이지의 내용",
+    "출처가 실제로 그 사건을 가리키는지",
+  ],
+  caseVerificationAvailable: false as const,
+};
+
+export type CaseVerification = "domain_and_moderator_assertion";
+export const CASE_VERIFICATION: CaseVerification = "domain_and_moderator_assertion";
 
 export type OfficialSourceRegistryEntry = {
   channelId: string;
@@ -154,13 +176,13 @@ export function parseSupportingSourceUrl(
 }
 
 export const OFFICIAL_SOURCE_REJECTION_MESSAGE: Record<SourceRejection, string> = {
-  missing: "공식 출처 확인에는 출처 주소가 필요합니다.",
+  missing: "공식 포털 인용에는 출처 주소가 필요합니다.",
   invalid_url: "출처 주소 형식이 올바르지 않습니다.",
   not_https: "출처 주소는 https:// 로 시작해야 합니다.",
   embedded_credentials:
     "출처 주소에 사용자 정보(@)를 넣을 수 없습니다. 실제 주소를 그대로 입력해 주세요.",
   unregistered_host:
-    "확인된 공식 포털 도메인이 아닙니다. 공식 출처로 기록하려면 등록된 포털 주소를 사용하고, 그 밖의 자료는 '운영자 기록(미검증)'으로 남겨 주세요.",
+    "등록된 공식 포털 도메인이 아닙니다. 포털 인용으로 기록하려면 등록된 포털 주소를 사용하고, 그 밖의 자료는 '운영자 기록(미검증)'으로 남겨 주세요.",
 };
 
 /** Hosts a moderator may cite for an `official_source` record. */

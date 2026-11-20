@@ -1,8 +1,8 @@
 import type { Db } from "../db/connection.ts";
 import { all, one, run, transaction } from "../db/query.ts";
 import { conflict, forbidden, notFound } from "../http/errors.ts";
-import { isPublicId } from "../ids.ts";
-import { removeMedia } from "../services/media-store.ts";
+import { internalId, isPublicId } from "../ids.ts";
+import { removeMedia, type MediaScope } from "../services/media-store.ts";
 import type { ReportRow } from "./reports.ts";
 import type { PublicUser } from "./users.ts";
 
@@ -15,19 +15,163 @@ export type WithdrawalResult = {
   requestedBy: RemovalReason;
   /** Public routes stop serving the report and its evidence immediately. */
   publicVisibility: "none";
-  /** Files actually removed from the local media store. */
+  /** Files actually removed from the local media store in this call. */
   mediaDeleted: number;
   mediaDeleteFailures: number;
+  /** Durable cleanup rows still pending after this call (0 when clean). */
+  cleanupPending: number;
 };
+
+export type MediaCleanupRow = {
+  id: string;
+  report_id: string;
+  scope: MediaScope;
+  storage_key: string;
+  created_at: string;
+  attempts: number;
+  last_error: string | null;
+  completed_at: string | null;
+};
+
+type RemoveFile = (scope: MediaScope, key: string) => Promise<void>;
+
+export type CleanupResult = {
+  completed: number;
+  failed: number;
+  pending: number;
+};
+
+const MAX_ERROR_LENGTH = 300;
+
+/** Pending cleanup rows, oldest first. */
+export function listPendingMediaCleanup(
+  db: Db,
+  limit = 100,
+  reportId?: string,
+): MediaCleanupRow[] {
+  return reportId
+    ? all<MediaCleanupRow>(
+        db,
+        `SELECT * FROM media_cleanup
+          WHERE completed_at IS NULL AND report_id = ?
+          ORDER BY created_at, rowid
+          LIMIT ?`,
+        [reportId, limit],
+      )
+    : all<MediaCleanupRow>(
+        db,
+        `SELECT * FROM media_cleanup
+          WHERE completed_at IS NULL
+          ORDER BY created_at, rowid
+          LIMIT ?`,
+        [limit],
+      );
+}
+
+export function countPendingMediaCleanup(db: Db): number {
+  return (
+    one<{ count: number }>(
+      db,
+      "SELECT COUNT(*) AS count FROM media_cleanup WHERE completed_at IS NULL",
+    )?.count ?? 0
+  );
+}
+
+/**
+ * Attempt every pending deletion once.
+ *
+ * Extracted from the request path so it can be retried after a failure: a
+ * filesystem delete can fail for reasons the request cannot fix (permissions,
+ * transient I/O, a mounted volume). Before this queue existed, the idempotent
+ * `state === 'removed'` early return meant such a file was orphaned forever
+ * while the public route had already stopped serving it.
+ *
+ * The queue is durable in SQLite and holds only storage keys (never personal
+ * data), so a restart does not lose the obligation. Attempts and the last error
+ * stay observable; bytes are retried until one succeeds.
+ */
+export async function processMediaCleanup(
+  db: Db,
+  options: { limit?: number; removeFile?: RemoveFile; reportId?: string } = {},
+): Promise<CleanupResult> {
+  const rows = listPendingMediaCleanup(
+    db,
+    options.limit ?? 50,
+    options.reportId,
+  );
+  const remove = options.removeFile ?? removeMedia;
+  let completed = 0;
+  let failed = 0;
+
+  for (const row of rows) {
+    try {
+      await remove(row.scope, row.storage_key);
+      run(
+        db,
+        `UPDATE media_cleanup
+            SET completed_at = ?, last_error = NULL, attempts = attempts + 1
+          WHERE id = ? AND completed_at IS NULL`,
+        [new Date().toISOString(), row.id],
+      );
+      completed += 1;
+    } catch (error) {
+      failed += 1;
+      const message =
+        error instanceof Error ? error.message : String(error);
+      run(
+        db,
+        `UPDATE media_cleanup
+            SET attempts = attempts + 1, last_error = ?
+          WHERE id = ? AND completed_at IS NULL`,
+        [message.slice(0, MAX_ERROR_LENGTH), row.id],
+      );
+      console.error("[takedown] media cleanup retry failed", {
+        report: row.report_id,
+        scope: row.scope,
+        attempts: row.attempts + 1,
+        error: message,
+      });
+    }
+  }
+
+  return {
+    completed,
+    failed,
+    pending: options.reportId
+      ? listPendingMediaCleanup(db, Number.MAX_SAFE_INTEGER, options.reportId).length
+      : countPendingMediaCleanup(db),
+  };
+}
+
+function enqueueMediaCleanup(
+  db: Db,
+  reportId: string,
+  items: Array<{ scope: MediaScope; storage_key: string }>,
+  now: Date,
+): void {
+  for (const item of items) {
+    // UNIQUE(scope, storage_key) makes a repeat withdrawal a no-op.
+    run(
+      db,
+      `INSERT OR IGNORE INTO media_cleanup
+         (id, report_id, scope, storage_key, created_at, attempts)
+       VALUES (?, ?, ?, ?, ?, 0)`,
+      [internalId("mcl"), reportId, item.scope, item.storage_key, now.toISOString()],
+    );
+  }
+}
 
 /**
  * Withdraw or take down a published report.
  *
  * Ordering:
  * 1. Authorise (owner or moderator) and reject non-published states.
- * 2. In one transaction, mark the report removed and delete its public media
- *    row, so no route can resolve a public image afterwards.
- * 3. After commit, delete the public image and every evidence image from disk.
+ * 2. In one transaction, mark the report removed, delete its public media row
+ *    and enqueue every public/evidence file for deletion, so no route can
+ *    resolve an image and the deletion obligation survives a crash.
+ * 3. After commit, attempt the deletions. Failures stay queued, are observable
+ *    (`cleanupPending`, `attempts`, `last_error`) and are retried by later
+ *    withdrawals and by `processMediaCleanup`.
  *
  * The report row, masks, timeline and withdrawal metadata are kept as the
  * record of what was published and why it stopped being public. This is a
@@ -35,13 +179,13 @@ export type WithdrawalResult = {
  * the remaining retention and cache limitations.
  *
  * Idempotent: withdrawing an already-removed report returns its current state
- * without touching media again.
+ * and retries any pending cleanup instead of silently skipping it.
  */
 export async function withdrawReport(
   db: Db,
   actor: PublicUser,
   publicReportId: string,
-  input: { reason?: string } = {},
+  input: { reason?: string; removeFile?: RemoveFile } = {},
   now: Date = new Date(),
 ): Promise<WithdrawalResult> {
   if (!isPublicId(publicReportId, "cp")) throw notFound();
@@ -57,14 +201,23 @@ export async function withdrawReport(
   }
 
   if (row.state === "removed") {
+    // A previous attempt may have left files behind. Retrying here is the whole
+    // point: the early return used to make that failure permanent.
+    const retried = await processMediaCleanup(db, {
+      removeFile: input.removeFile,
+      reportId: row.id,
+    });
+    // Report how the removal originally happened, not who asked again.
+    const originallyByOwner = !row.removed_by || row.removed_by === row.owner_id;
     return {
       publicId: row.public_id,
       state: "removed",
       removedAt: row.removed_at ?? now.toISOString(),
-      requestedBy: isModerator && !isOwner ? "moderator_takedown" : "owner_withdrawn",
+      requestedBy: originallyByOwner ? "owner_withdrawn" : "moderator_takedown",
       publicVisibility: "none",
-      mediaDeleted: 0,
-      mediaDeleteFailures: 0,
+      mediaDeleted: retried.completed,
+      mediaDeleteFailures: retried.failed,
+      cleanupPending: retried.pending,
     };
   }
   if (row.state !== "published") {
@@ -112,37 +265,30 @@ export async function withdrawReport(
     run(db, "DELETE FROM report_media WHERE report_id = ? AND role = 'public'", [
       row.id,
     ]);
+    enqueueMediaCleanup(
+      db,
+      row.id,
+      [
+        ...publicMedia.map((item) => ({
+          scope: "public" as const,
+          storage_key: item.storage_key,
+        })),
+        ...evidence.map((item) => ({
+          scope: "private" as const,
+          storage_key: item.storage_key,
+        })),
+      ],
+      now,
+    );
   });
 
   // Delete bytes only after the database says the report is private again. A
-  // failure here leaves an unreachable file, which is safer than deleting a
-  // file that a still-public row references.
-  let mediaDeleted = 0;
-  let mediaDeleteFailures = 0;
-  for (const item of publicMedia) {
-    try {
-      await removeMedia("public", item.storage_key);
-      mediaDeleted += 1;
-    } catch (error) {
-      mediaDeleteFailures += 1;
-      console.error("[takedown] public media delete failed", {
-        report: row.public_id,
-        error,
-      });
-    }
-  }
-  for (const item of evidence) {
-    try {
-      await removeMedia("private", item.storage_key);
-      mediaDeleted += 1;
-    } catch (error) {
-      mediaDeleteFailures += 1;
-      console.error("[takedown] evidence media delete failed", {
-        report: row.public_id,
-        error,
-      });
-    }
-  }
+  // failure here leaves an unreachable file with a durable retry record, which
+  // is safer than deleting a file a still-public row references.
+  const result = await processMediaCleanup(db, {
+    removeFile: input.removeFile,
+    reportId: row.id,
+  });
 
   // The private original/working copies are intentionally retained: they are
   // not publicly reachable and are the evidence trail for the removal decision.
@@ -152,7 +298,8 @@ export async function withdrawReport(
     removedAt: timestamp,
     requestedBy,
     publicVisibility: "none",
-    mediaDeleted,
-    mediaDeleteFailures,
+    mediaDeleted: result.completed,
+    mediaDeleteFailures: result.failed,
+    cleanupPending: result.pending,
   };
 }

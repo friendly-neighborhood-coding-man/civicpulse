@@ -317,4 +317,29 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 8,
+    name: "durable media cleanup queue",
+    up(db) {
+      db.exec(`
+        -- A filesystem delete can fail after the report is already private.
+        -- The obligation is stored here so a retry is possible after a restart,
+        -- instead of being lost by the idempotent "already removed" path.
+        -- Only storage keys are stored: no report text, notes or personal data.
+        CREATE TABLE media_cleanup (
+          id           TEXT PRIMARY KEY,
+          report_id    TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+          scope        TEXT NOT NULL CHECK (scope IN ('public','private')),
+          storage_key  TEXT NOT NULL,
+          created_at   TEXT NOT NULL,
+          attempts     INTEGER NOT NULL DEFAULT 0,
+          last_error   TEXT,
+          completed_at TEXT,
+          UNIQUE (scope, storage_key)
+        );
+        CREATE INDEX media_cleanup_pending_idx
+          ON media_cleanup(completed_at, created_at);
+      `);
+    },
+  },
 ];

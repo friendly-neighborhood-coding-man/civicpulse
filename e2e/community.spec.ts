@@ -159,14 +159,15 @@ test.describe("community and tracking", () => {
     await expect(statusPanel.getByText("처리 중")).toBeVisible();
     await expect(statusPanel.getByText("미해결")).toBeVisible();
     await expect(
-      statusPanel.getByText("공식 출처 확인", { exact: true }),
+      statusPanel.getByText("공식 포털 인용", { exact: true }),
     ).toBeVisible();
+    await expect(statusPanel.getByText("안 됨 (도메인만 확인)")).toBeVisible();
     await expect(
       statusPanel.getByText("운영자 기록(미검증)", { exact: true }),
     ).toBeVisible();
     await expect(statusPanel.getByText("시민 주장", { exact: true })).toBeVisible();
     await expect(anonPage.getByText("구청에서 보수 일정을 안내했습니다.")).toBeVisible();
-    await expect(anonPage.getByRole("link", { name: /출처 열기/ }).first()).toHaveAttribute(
+    await expect(anonPage.getByRole("link", { name: /포털 열기/ }).first()).toHaveAttribute(
       "href",
       "https://www.safetyreport.go.kr/",
     );
@@ -174,7 +175,7 @@ test.describe("community and tracking", () => {
     // The feed lists the issue with its support count and official status.
     await anonPage.goto(`${baseURL}/issues`);
     await expect(anonPage.getByText(/지지 1명/)).toBeVisible();
-    await expect(anonPage.getByText(/공식 출처 확인 · 처리 중/)).toBeVisible();
+    await expect(anonPage.getByText(/포털 인용 · 처리 중/)).toBeVisible();
 
     await anon.close();
   });
