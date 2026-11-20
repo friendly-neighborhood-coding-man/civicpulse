@@ -83,6 +83,7 @@ gh pr create --draft --base stack/09-review-corrections --head stack/10-identity
 | `npm run e2e` (Chromium, `next start`, demo, fresh `.local/e2e`) | PASS — 17 tests |
 | `npm run e2e:password` (Chromium, `next start`, password, fresh `.local/e2e-password`) | PASS — 3 tests |
 | Base reproduction (`27dcf10`, temporary worktree/server) | Both password accounts and `demo: true` disclosed |
+| Base regression run (new deletion/retention tests at `27dcf10`) | 3 failures: 0 files queued, 2 private files retained |
 
 The demo Chromium run executes: honest home/health; identity switch/sign-out; foreign
 origin rejection; create → edit → reload; invalid upload/fields; signed-out draft 404;

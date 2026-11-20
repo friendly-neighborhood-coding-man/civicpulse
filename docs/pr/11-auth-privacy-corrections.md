@@ -81,7 +81,10 @@ New or extended tests (all failing assertions target the old behavior/shape):
 | `e2e-password/auth-privacy.spec.ts` (3) | real password server: unauthenticated directory absent; health reports password mode; login returns self only; logout clears cookie; 35 sign-outs never 429; mocked 500 and aborted network keep the session and show an error |
 | `e2e/foundation.spec.ts` | demo health reports `authMode: "demo"` (existing demo behavior preserved) |
 
-The base-commit disclosure was reproduced independently (see Verification).
+The base-commit disclosure was reproduced independently (see Verification). The
+new account-deletion and retention tests were also run against `27dcf10`: all three
+failed there (`filesQueued` was 0 for a published report and the two private files
+survived deletion), then passed on this branch.
 
 ## Verification (observed)
 
@@ -94,6 +97,7 @@ The base-commit disclosure was reproduced independently (see Verification).
 | `npm run e2e` | PASS — 17 Chromium tests (demo mode) |
 | `npm run e2e:password` | PASS — 3 Chromium tests (password mode, throwaway data dir) |
 | Base reproduction | `stack/10` server returned the full directory and `demo: true`; see below |
+| Base regression run | New deletion/retention tests fail at `27dcf10` (0 files queued, 2 private files retained); pass at the stage-11 head |
 
 Base reproduction (before the fix, `27dcf10`, temporary data dir, no external
 state): two provisioned password accounts, then unauthenticated
