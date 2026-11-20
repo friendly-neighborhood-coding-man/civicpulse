@@ -190,3 +190,93 @@ node scripts/capture.mjs http://127.0.0.1:3000   # optional screenshots → .loc
   no export/download, and no submission tracking. Waiting period/cooldown are demo
   configuration printed in the UI, not legal policy.
 - Follow-ups are visible to the owner only; moderators cannot review them yet.
+
+## Public-text privacy gate (stage 07)
+
+Publishing previously reviewed only pixels; `title` and `description` were copied
+into the public projection verbatim. Now:
+
+- `src/lib/privacy/text.ts` scans the exact public fields for six synthetic-friendly
+  shapes (resident-id, phone, email, plate, unit address, honorific name hint). It
+  is explicitly a heuristic and the UI says so; findings never claim safety.
+- Findings carry only a masked preview and offsets. The audit stored on the report
+  (`text_findings`) contains kinds/counts/fields, never the values.
+- `POST /api/reports/:id/publish` requires `textReviewed` **and** a
+  `textToken` issued for the current text. Editing the draft changes the token, so
+  an old acknowledgement cannot approve new content.
+- Findings require a second, explicit acknowledgement (`textFindingsReviewed`);
+  correcting the text removes the requirement.
+- Evidence notes are public text too, so the same scan rejects a note that contains
+  a detected shape, with an editable message.
+
+## Status provenance (stage 07)
+
+`kind = 'official'` used to mean "a moderator typed an HTTPS URL". That conflated a
+moderator assertion with a government record. Migration v6 rebuilds the table:
+
+| kind | who | requirement | public label |
+|---|---|---|---|
+| `official_source` | moderator | host in the curated registry (안전신문고/국민신문고), https, no userinfo | 공식 출처 확인 · 운영자 입력 |
+| `moderator_claim` | moderator | any https link or none | 운영자 기록 · 미검증 |
+| `user_claim` | report owner | no link | 시민 주장 |
+| `mock` | moderator | no link | 모의 데이터 |
+
+No authenticated government integration exists (`AUTHENTICATED_OFFICIAL_INTEGRATION =
+false`); nothing is labelled as one. The host check uses exact/suffix matching, so
+`https://www.safetyreport.go.kr.evil.example/`, `https://evilsafetyreport.go.kr/` and
+`https://www.safetyreport.go.kr@evil.example/` are all rejected. Only
+`official_source` feeds `officialStatus`, the feed chip, the follow-up "resolved"
+suppression, and the draft's official section; unverified moderator notes are carried
+into drafts as labelled claims. Legacy `official` rows are reclassified by the same
+rule during migration, so an overstated row becomes 미검증 rather than keeping the
+old claim.
+
+## Follow-up support and evidence chronology (stage 08)
+
+- A draft snapshots `support_count`. It is stated as community interest that does
+  **not** determine truth or legitimacy. Support is not an eligibility input, so
+  popularity alone can never create a draft; only waiting period + newly approved
+  evidence + unresolved status + cooldown do.
+- "New evidence" is evaluated against the previous follow-up's review time and each
+  item's **approval** time (`reviewed_at`), not its upload time. A photo uploaded
+  before the previous request but approved afterwards is new material. The draft
+  prints the approval date and labels it accordingly.
+
+## Withdrawal, takedown and retention (stage 08)
+
+- `POST /api/reports/:id/withdraw` (owner or moderator, same-origin, rate limited)
+  marks the report `removed` with `removed_at/removed_by/removal_reason`, deletes the
+  public media row in the same transaction, and only then deletes the public image
+  and every evidence image from disk.
+- Every public surface already filtered on `state = 'published'`; the evidence photo
+  route now also checks the parent report, so approved evidence cannot outlive a
+  takedown.
+- Public media is served `no-store`, so withdrawal is not masked by a shared cache.
+- Retention is deliberate and partial: the report row, masks, timeline, text audit
+  and private original/working copies remain for the audit trail. See "Known
+  limitations" for what is *not* deleted.
+
+## Verification status (stage 08)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | PASS |
+| `npm run lint` | PASS |
+| `npm test` | PASS — 118 tests / 20 files |
+| `npm run build` | PASS (production build used by E2E) |
+| `npm run e2e` | PASS — 16 Chromium tests against `next start` |
+| Visual review | privacy text panel (desktop 1280px, mobile 390px), public provenance panel, withdrawn owner page |
+
+## Known limitations (stage 08)
+
+- Text scanning is pattern-based: it misses names without honorifics, obfuscated
+  digits, unusual addresses, and can false-positive. Human review is the control.
+- Official provenance is a **domain** check plus a human assertion. The cited page's
+  content is not fetched or verified, and no government API is integrated.
+- Withdrawal removes public visibility and app-served media, not every copy: browser
+  caches, screenshots, search engines, backups and CDN logs are outside this app.
+  There is no scheduled purge, legal hold, account deletion or export.
+- Removed reports keep private originals, masks and timeline rows indefinitely.
+- Demo cookie identity, single-node SQLite, local-filesystem media and an in-process
+  rate limiter remain the deployment boundaries (no edge/Workers target).
+- No public pagination, no edit/revision flow for published text, no notification.

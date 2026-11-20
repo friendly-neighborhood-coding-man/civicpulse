@@ -300,4 +300,21 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 7,
+    name: "follow-up support snapshot and public withdrawal",
+    up(db) {
+      db.exec(`
+        -- Support at draft time. Follow-up eligibility never depends on it; the
+        -- draft only reports community interest as context.
+        ALTER TABLE followups ADD COLUMN support_count INTEGER NOT NULL DEFAULT 0;
+
+        -- Withdrawal/takedown keeps the row (and its audit trail) but removes the
+        -- report from every public surface.
+        ALTER TABLE reports ADD COLUMN removed_at TEXT;
+        ALTER TABLE reports ADD COLUMN removed_by TEXT REFERENCES users(id);
+        ALTER TABLE reports ADD COLUMN removal_reason TEXT;
+      `);
+    },
+  },
 ];

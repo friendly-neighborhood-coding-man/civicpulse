@@ -34,7 +34,16 @@ export type FollowupBody = {
     note: string;
     createdAt: string;
   }>;
-  evidence: Array<{ note: string; createdAt: string }>;
+  evidence: Array<{ note: string; approvedAt: string }>;
+  /**
+   * Reported support at draft time. Context only: it is never presented as
+   * evidence that the report is true, and it never makes a draft eligible.
+   */
+  communitySupport: {
+    count: number;
+    note: string;
+    countsAsVerification: false;
+  };
   channel: { name: string; operator: string; url: string } | null;
   attachments: string[];
   disclaimer: string;
@@ -60,7 +69,8 @@ export type FollowupInput = {
     note: string;
     createdAt: string;
   }>;
-  evidence: Array<{ note: string; createdAt: string }>;
+  evidence: Array<{ note: string; approvedAt: string }>;
+  supportCount: number;
   channel: PublicChannel | null;
 };
 
@@ -87,6 +97,9 @@ export function generateFollowupDraft(input: FollowupInput): FollowupBody {
       input.official
         ? `마지막으로 확인된 공식 출처 기록은 '${STATUS_LABEL[input.official.status]}'입니다. 정부 시스템과 자동 연동된 기록은 아닙니다.`
         : "아직 공식 포털 출처와 함께 확인된 상태가 없습니다.",
+      input.supportCount > 0
+        ? `공개 화면에서 지지 ${input.supportCount}명이 확인되었습니다. 이는 지역 관심의 표시이며, 제보 내용의 사실 여부를 판정하지 않습니다.`
+        : "공개 화면에 아직 지지 표시는 없습니다. 지지 수는 사실 판정이 아닙니다.",
     ].join(" "),
     currentSituation: [
       `현황: ${input.title}`,
@@ -102,7 +115,8 @@ export function generateFollowupDraft(input: FollowupInput): FollowupBody {
           )}, 검증되지 않음): ${claim.note}`,
       ),
       ...input.evidence.map(
-        (item) => `추가 근거(${formatDate(item.createdAt)}): ${item.note}`,
+        (item) =>
+          `추가 근거(검토 승인 ${formatDate(item.approvedAt)}): ${item.note}`,
       ),
     ].join("\n"),
     requestedAction: input.official
@@ -126,8 +140,16 @@ export function generateFollowupDraft(input: FollowupInput): FollowupBody {
     })),
     evidence: input.evidence.map((item) => ({
       note: item.note,
-      createdAt: item.createdAt,
+      approvedAt: item.approvedAt,
     })),
+    communitySupport: {
+      count: input.supportCount,
+      note:
+        input.supportCount > 0
+          ? `공개 화면에서 지지 ${input.supportCount}명이 확인되었습니다. 이는 제보 내용의 사실 여부나 정당성을 판정하지 않습니다.`
+          : "공개 화면에 기록된 지지 표시가 없습니다.",
+      countsAsVerification: false,
+    },
     channel: input.channel
       ? {
           name: input.channel.name,
@@ -160,6 +182,10 @@ export function renderFollowupText(body: FollowupBody): string {
     "",
     "[요청 사항]",
     body.requestedAction,
+    "",
+    "[지역 관심]",
+    body.communitySupport?.note ??
+      "지지 정보가 기록되지 않은 초안입니다. 지지 수는 사실 판정이 아닙니다.",
     "",
     body.channel
       ? `[제출 창구] ${body.channel.name} (${body.channel.operator}) ${body.channel.url}`

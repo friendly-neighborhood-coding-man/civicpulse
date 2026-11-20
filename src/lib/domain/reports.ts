@@ -40,6 +40,9 @@ export type ReportRow = {
   text_reviewed_at: string | null;
   text_review_version: string | null;
   text_findings: string;
+  removed_at: string | null;
+  removed_by: string | null;
+  removal_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -76,6 +79,8 @@ export type OwnerReport = {
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;
+  removedAt: string | null;
+  removalReason: string | null;
   assistant: { mode: string; generatedAt: string } | null;
   missingEvidence: string[];
   suggestedSteps: string[];
@@ -115,6 +120,8 @@ export function toOwnerReport(row: ReportRow, media?: MediaRow): OwnerReport {
     areaLabel: row.area_label,
     state: row.state,
     publishedAt: row.published_at,
+    removedAt: row.removed_at,
+    removalReason: row.removal_reason,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     assistant:

@@ -6,6 +6,7 @@ import DemoSignInCard from "@/components/DemoSignInCard";
 import DraftEditor from "@/components/DraftEditor";
 import FollowupPanel from "@/components/FollowupPanel";
 import PrivacyPublishFlow from "@/components/PrivacyPublishFlow";
+import ReportWithdrawal from "@/components/ReportWithdrawal";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/connection";
 import { getChannel, toPublicChannel } from "@/lib/domain/channels";
@@ -83,6 +84,10 @@ export default async function ReportDraftPage({ params }: PageProps) {
               <span className="rounded-full border border-accent/30 bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent-strong">
                 공개됨
               </span>
+            ) : report.state === "removed" ? (
+              <span className="rounded-full border border-danger/30 bg-danger-soft px-2.5 py-1 text-[11px] font-semibold text-danger">
+                공개 중단됨
+              </span>
             ) : (
               <span className="rounded-full border border-warn/30 bg-warn-soft px-2.5 py-1 text-[11px] font-semibold text-warn">
                 비공개 초안
@@ -137,7 +142,11 @@ export default async function ReportDraftPage({ params }: PageProps) {
           <section className="card p-6" aria-labelledby="edit-heading">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="edit-heading" className="text-lg font-semibold text-ink">
-                {report.state === "draft" ? "초안 검토·수정" : "공개된 본문"}
+                {report.state === "draft"
+                  ? "초안 검토·수정"
+                  : report.state === "removed"
+                    ? "공개했던 본문"
+                    : "공개된 본문"}
               </h2>
               <span className="rounded-full border border-line bg-surface-muted px-2.5 py-1 text-[11px] text-muted">
                 {report.state === "draft" ? "편집 가능" : "읽기 전용"}
@@ -263,6 +272,22 @@ export default async function ReportDraftPage({ params }: PageProps) {
               >
                 공개 페이지 보기
               </Link>
+              <div className="mt-4">
+                <ReportWithdrawal publicId={report.publicId} audience="owner" />
+              </div>
+            </section>
+          ) : report.state === "removed" ? (
+            <section className="rounded-2xl border border-danger/25 bg-danger-soft/40 p-5">
+              <h2 className="text-sm font-semibold text-ink">공개가 중단된 기록</h2>
+              <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+                공개 페이지와 근거 사진은 더 이상 표시되지 않습니다. 기록과 처리
+                이력은 감사 목적으로 남습니다.
+              </p>
+              {report.removalReason ? (
+                <p className="mt-2 text-[11px] text-muted">
+                  사유: {report.removalReason}
+                </p>
+              ) : null}
             </section>
           ) : (
             <section className="rounded-2xl border border-dashed border-line-strong bg-surface-muted p-5">
