@@ -10,6 +10,11 @@ export type UserRecord = {
   display_name: string;
   role: UserRole;
   created_at: string;
+  /** Password provider only; demo accounts keep these NULL. */
+  email?: string | null;
+  password_hash?: string | null;
+  /** Set on account deletion; the row stays as an anonymised foreign-key anchor. */
+  deleted_at?: string | null;
 };
 
 /**

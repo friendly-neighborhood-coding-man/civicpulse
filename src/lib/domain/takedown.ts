@@ -143,22 +143,38 @@ export async function processMediaCleanup(
   };
 }
 
+/**
+ * Public entry point for other deletion paths (account deletion, retention).
+ * Keys are validated by `removeMedia` when the retry runs.
+ */
+export function queueMediaDeletion(
+  db: Db,
+  reportId: string,
+  items: Array<{ scope: MediaScope; storage_key: string }>,
+  now: Date = new Date(),
+): number {
+  return enqueueMediaCleanup(db, reportId, items, now);
+}
+
 function enqueueMediaCleanup(
   db: Db,
   reportId: string,
   items: Array<{ scope: MediaScope; storage_key: string }>,
   now: Date,
-): void {
+): number {
+  let inserted = 0;
   for (const item of items) {
     // UNIQUE(scope, storage_key) makes a repeat withdrawal a no-op.
-    run(
+    const result = run(
       db,
       `INSERT OR IGNORE INTO media_cleanup
          (id, report_id, scope, storage_key, created_at, attempts)
        VALUES (?, ?, ?, ?, ?, 0)`,
       [internalId("mcl"), reportId, item.scope, item.storage_key, now.toISOString()],
     );
+    inserted += result.changes;
   }
+  return inserted;
 }
 
 /**
