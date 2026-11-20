@@ -1,5 +1,6 @@
 import { getAssistantMode } from "@/lib/config";
 import { getDb, getSchemaVersion } from "@/lib/db/connection";
+import { countRetentionEligible } from "@/lib/domain/retention";
 import { countPendingMediaCleanup } from "@/lib/domain/takedown";
 import { jsonError, jsonOk } from "@/lib/http/api";
 import { ApiError } from "@/lib/http/errors";
@@ -12,12 +13,15 @@ export async function GET() {
     // not succeeded yet. Zero is the healthy value; a non-zero value means the
     // public route is already closed but bytes still await retry.
     const mediaCleanupPending = countPendingMediaCleanup(db);
+    const retentionDue = countRetentionEligible(db);
     return jsonOk({
       status: "ok",
       schemaVersion: version,
       assistantMode: getAssistantMode(),
       demoMode: true,
       mediaCleanupPending,
+      // Rows the retention job would remove now; 0 is the healthy steady state.
+      retentionEligible: retentionDue,
       time: new Date().toISOString(),
     });
   } catch (error) {

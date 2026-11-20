@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 
+import { isSessionAllowedForMode } from "./mode.ts";
 import { getSessionSecret, isProduction } from "../config.ts";
 import type { Db } from "../db/connection.ts";
 import { getDb } from "../db/connection.ts";
@@ -34,7 +35,8 @@ export async function getSessionUser(db: Db = getDb()): Promise<PublicUser | nul
   const verified = verifySession(token, getSessionSecret());
   if (!verified.ok) return null;
   const user = getUserById(db, verified.payload.sub);
-  return user ? toPublicUser(user) : null;
+  if (!user || !isSessionAllowedForMode(user)) return null;
+  return toPublicUser(user);
 }
 
 export async function setSessionUser(userId: string): Promise<void> {

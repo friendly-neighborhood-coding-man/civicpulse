@@ -1,15 +1,19 @@
 import Link from "next/link";
 
+import { getAuthMode } from "@/lib/auth/mode";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/connection";
 import { listUsers } from "@/lib/domain/users";
 
+import AuthMenu from "./AuthMenu";
 import IdentitySwitcher from "./IdentitySwitcher";
 
 export default async function SiteHeader() {
   const db = getDb();
   const currentUser = await getSessionUser(db);
-  const users = listUsers(db);
+  const mode = getAuthMode();
+  // Only the demo provider needs the synthetic user list.
+  const users = mode === "demo" ? listUsers(db) : [];
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/85 backdrop-blur">
@@ -73,9 +77,13 @@ export default async function SiteHeader() {
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <span className="hidden items-center gap-1.5 rounded-full border border-warn/30 bg-warn-soft px-2.5 py-1 text-[11px] font-semibold text-warn sm:flex">
             <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-warn" />
-            데모 · 합성 데이터
+            {mode === "demo" ? "데모 · 합성 데이터" : "계정 기반 배포"}
           </span>
-          <IdentitySwitcher users={users} currentUser={currentUser} />
+          {mode === "demo" ? (
+            <IdentitySwitcher users={users} currentUser={currentUser} />
+          ) : (
+            <AuthMenu user={currentUser} />
+          )}
         </div>
       </div>
     </header>

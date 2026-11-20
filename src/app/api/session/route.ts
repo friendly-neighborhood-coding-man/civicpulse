@@ -5,6 +5,7 @@ import {
   getSessionUser,
   setSessionUser,
 } from "@/lib/auth/session";
+import { isDemoAuthMode } from "@/lib/auth/mode";
 import { getSessionSwitchLimit } from "@/lib/config";
 import { getDb } from "@/lib/db/connection";
 import { DEMO_USERS } from "@/lib/db/seed";
@@ -28,6 +29,15 @@ export async function GET() {
 export async function POST(request: Request) {
   return withApi(async () => {
     assertSameOrigin(request);
+    // The demo switcher is not authentication. In password mode it is not merely
+    // hidden: it is refused, so knowing a demo id cannot grant a session.
+    if (!isDemoAuthMode()) {
+      throw new ApiError(
+        403,
+        "FORBIDDEN",
+        "데모 사용자 전환은 이 배포에서 사용할 수 없습니다.",
+      );
+    }
     enforceRateLimit("session:switch", {
       limit: getSessionSwitchLimit(),
       windowMs: 60_000,

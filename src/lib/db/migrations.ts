@@ -342,4 +342,40 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 9,
+    name: "real identity, account deletion and retention purge",
+    up(db) {
+      db.exec(`
+        -- Password identity is additive: demo accounts keep NULL email/hash and
+        -- the standalone demo stays password-free by default.
+        ALTER TABLE users ADD COLUMN email TEXT;
+        ALTER TABLE users ADD COLUMN password_hash TEXT;
+        ALTER TABLE users ADD COLUMN deleted_at TEXT;
+        CREATE UNIQUE INDEX users_email_idx ON users(email) WHERE email IS NOT NULL;
+
+        -- Retention deletes a report row after queueing its files. The queue must
+        -- outlive that row, so the cascade FK is removed (keys only, no content).
+        CREATE TABLE media_cleanup_v2 (
+          id           TEXT PRIMARY KEY,
+          report_id    TEXT NOT NULL,
+          scope        TEXT NOT NULL CHECK (scope IN ('public','private')),
+          storage_key  TEXT NOT NULL,
+          created_at   TEXT NOT NULL,
+          attempts     INTEGER NOT NULL DEFAULT 0,
+          last_error   TEXT,
+          completed_at TEXT,
+          UNIQUE (scope, storage_key)
+        );
+        INSERT INTO media_cleanup_v2
+          (id, report_id, scope, storage_key, created_at, attempts, last_error, completed_at)
+        SELECT id, report_id, scope, storage_key, created_at, attempts, last_error, completed_at
+          FROM media_cleanup;
+        DROP TABLE media_cleanup;
+        ALTER TABLE media_cleanup_v2 RENAME TO media_cleanup;
+        CREATE INDEX media_cleanup_pending_idx
+          ON media_cleanup(completed_at, created_at);
+      `);
+    },
+  },
 ];

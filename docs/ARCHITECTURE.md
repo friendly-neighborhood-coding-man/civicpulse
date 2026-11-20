@@ -283,18 +283,40 @@ labels say **공식 포털 인용** rather than "공식 확인".
   detects an edited draft whose acknowledgement is stale. It is not server-issued,
   signed or proof of review; `tokenKind`/`signed` expose that in the API.
 
-## Verification status (stage 09)
+## Identity, account data and retention (stage 10)
+
+- **Two explicit providers.** `CIVICPULSE_AUTH_MODE=demo` keeps the password-less
+  synthetic switcher (default, zero setup, labelled as not authentication).
+  `password` stores email + scrypt hashes and signs in through
+  `POST /api/auth/login`; accounts are provisioned by `npm run user:create`, never by
+  a public endpoint. Unknown modes throw instead of silently falling back.
+- **Mode switching is a boundary.** `isSessionAllowedForMode` rejects password-less
+  accounts in password mode, so a leftover demo cookie stops working; the demo
+  switcher endpoint is refused rather than merely hidden.
+- **Export** (`GET /api/account/export`) is owner-scoped and excludes password
+  material, other identities and storage keys. **Deletion** withdraws published
+  reports, deletes drafts and personal rows, queues owned files, and anonymises the
+  user row to preserve historical foreign keys.
+- **Retention** (`runRetention`, `CIVICPULSE_RETENTION_DAYS`, default 90) deletes
+  removed reports and rejected evidence after the window. `media_cleanup` has no FK to
+  `reports` on purpose: queued deletions must survive the row they refer to. Triggers
+  are `npm run retention` (cron) and a moderator endpoint; there is no scheduler.
+- **Deployment** is one Node process + SQLite + a persistent volume, documented in
+  `docs/DEPLOYMENT.md`; Toss login/payments are documented as blocked in
+  `docs/TOSS.md` and are not claimed to work.
+
+## Verification status (stage 10)
 
 | Check | Result |
 |---|---|
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS |
-| `npm test` | PASS — 124 tests / 21 files |
+| `npm test` | PASS — 137 tests / 24 files |
 | `npm run build` | PASS (production build used by E2E) |
 | `npm run e2e` | PASS — 17 Chromium tests against `next start` |
 | Visual review | privacy text panel (desktop 1280px, mobile 390px), public provenance panel, withdrawn owner page |
 
-## Known limitations (stage 09)
+## Known limitations (stage 10)
 
 - Text scanning is pattern-based: it misses names without honorifics, obfuscated
   digits, unusual addresses, and can false-positive. Human review is the control.
@@ -308,5 +330,10 @@ labels say **공식 포털 인용** rather than "공식 확인".
   `mediaCleanupPending` (basis for the stage-10 retention work).
 - Removed reports keep private originals, masks and timeline rows indefinitely.
 - Demo cookie identity, single-node SQLite, local-filesystem media and an in-process
-  rate limiter remain the deployment boundaries (no edge/Workers target).
+  rate limiter remain the deployment boundaries (no edge/Workers target). Password mode
+  has no registration, reset, MFA or selective session revocation.
+- Retention runs only when an external scheduler invokes `npm run retention`; without
+  one, removed content is retained indefinitely. Backups are outside the app.
+- Account deletion keeps an anonymised tombstone and completed media-queue rows for
+  referential integrity; it cannot reach backups or external caches.
 - No public pagination, no edit/revision flow for published text, no notification.

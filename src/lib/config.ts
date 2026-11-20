@@ -106,6 +106,22 @@ export function getFollowupCooldownDays(): number {
 }
 
 /**
+ * Days a removed report and rejected evidence are retained before purge.
+ *
+ * Default 90. Bounded to 1-3650 so a typo cannot disable retention or set a
+ * window measured in decades. The purge itself is an explicit moderator job;
+ * there is no background scheduler in this deployment.
+ */
+export function getRetentionDays(): number {
+  const parsed = Number.parseInt(
+    process.env.CIVICPULSE_RETENTION_DAYS ?? "",
+    10,
+  );
+  if (!Number.isFinite(parsed)) return 90;
+  return Math.min(Math.max(parsed, 1), 3650);
+}
+
+/**
  * Demo identity switches allowed per minute in one process.
  *
  * This limits only the *demo* sign-in switcher, which is not authentication.

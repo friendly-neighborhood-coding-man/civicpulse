@@ -1,7 +1,7 @@
 # CivicPulse — handoff
 
-Latest verified head: `stack/09-review-corrections` (`git log -1` on the branch; the
-review-correction commit precedes the docs commit containing this file). Baseline was
+Latest verified head: `stack/10-identity-and-retention` (`git log -1` on the branch;
+the feature commit precedes the docs commit containing this file). Baseline was
 `stack/06-delivery` at `280b590`; `c1a9782` is its parent, not a divergent head.
 
 Date: 2026-11-19. Repository: <https://github.com/friendly-neighborhood-coding-man/civicpulse>.
@@ -20,7 +20,8 @@ contact fabricated, nothing deployed, no repository setting changed.
 | 06 Demo & Toss readiness | `stack/06-delivery` | `stack/05-followup` | `280b590` |
 | 07 Security hardening | `stack/07-security-hardening` | `stack/06-delivery` | `b380411` |
 | 08 Takedown & follow-up | `stack/08-takedown-and-followup` | `stack/07-security-hardening` | `aed422f` |
-| 09 Review corrections | `stack/09-review-corrections` | `stack/08-takedown-and-followup` | `git log -1` |
+| 09 Review corrections | `stack/09-review-corrections` | `stack/08-takedown-and-followup` | `f182b38` |
+| 10 Identity & retention | `stack/10-identity-and-retention` | `stack/09-review-corrections` | `git log -1` |
 
 **Why no Draft PRs:** this sandbox has no authenticated GitHub CLI or token
 (`gh auth status` → not logged in; no `GITHUB_*`/`GH_TOKEN`). Branch pushes work
@@ -35,6 +36,8 @@ gh pr create --draft --base stack/04-community         --head stack/05-followup 
 gh pr create --draft --base stack/05-followup          --head stack/06-delivery          --title "06 · Demo & Toss Readiness"   --body-file docs/pr/06-delivery.md
 gh pr create --draft --base stack/06-delivery          --head stack/07-security-hardening --title "07 · Security Hardening"     --body-file docs/pr/07-security-hardening.md
 gh pr create --draft --base stack/07-security-hardening --head stack/08-takedown-and-followup --title "08 · Takedown & Follow-up" --body-file docs/pr/08-takedown-and-followup.md
+gh pr create --draft --base stack/08-takedown-and-followup --head stack/09-review-corrections --title "09 · Review Corrections" --body-file docs/pr/09-review-corrections.md
+gh pr create --draft --base stack/09-review-corrections --head stack/10-identity-and-retention --title "10 · Identity & Retention" --body-file docs/pr/10-identity-and-retention.md
 ```
 
 ## What the mission corrected (stages 07–08)
@@ -59,6 +62,10 @@ gh pr create --draft --base stack/07-security-hardening --head stack/08-takedown
   public page, public photo and evidence photos immediately (transaction, then files),
   keep the audit record, and are idempotent.
 
+Stage 10 adds an optional password identity provider (demo remains the default), owner
+account export/deletion, a retention purge with a cron entry point, and the deployment
+and Toss decision records. Toss login/payments remain blocked, not simulated.
+
 Stage 09 addresses the independent review on PRs #8/#9: portal-domain checks are no
 longer presented as case verification, follow-ups use only the latest official status
 and require an explicit acknowledgement of a resolution claim, failed post-withdrawal
@@ -74,7 +81,7 @@ resolved/open findings.
 |---|---|
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS (0 errors/warnings) |
-| `npm test` (Vitest) | PASS — 124 tests / 21 files |
+| `npm test` (Vitest) | PASS — 137 tests / 24 files |
 | `npm run build` | PASS — production build |
 | `npm run e2e` (Playwright, Chromium, `next start`, fresh `.local/e2e`) | PASS — 17 tests |
 | Visual review | privacy text panel (1280px and 390px), public provenance panel, withdrawn owner page |
@@ -126,8 +133,9 @@ assumptions, not measurements.
 1. Create the eight Draft PRs with the commands above and review in stack order.
 2. Read `docs/REVIEW_CORRECTIONS.md`; decide whether the remaining risks are acceptable
    for a demo.
-3. Choose a real database and Node hosting, replace demo auth, and add account
-   deletion/export before any public pilot.
+3. Choose Node hosting with a persistent volume and `CIVICPULSE_AUTH_MODE=password` for a
+   pilot; configure `npm run retention` in cron and check `/api/health` for pending
+   cleanup/retention counts.
 4. Add a scheduled media/retention purge and a published-text revision flow.
 5. Only then start Toss integration per `docs/TOSS_READINESS.md`, re-verifying every
    policy URL at that time.
