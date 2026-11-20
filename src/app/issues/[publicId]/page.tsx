@@ -17,8 +17,9 @@ export const dynamic = "force-dynamic";
 type PageProps = { params: Promise<{ publicId: string }> };
 
 const KIND_STYLE: Record<StatusKind, string> = {
-  official: "border-accent/30 bg-accent-soft text-accent-strong",
-  user_claim: "border-warn/30 bg-warn-soft text-warn",
+  official_source: "border-accent/30 bg-accent-soft text-accent-strong",
+  moderator_claim: "border-warn/30 bg-warn-soft text-warn",
+  user_claim: "border-info/25 bg-info-soft text-info",
   mock: "border-dashed border-info/30 bg-info-soft text-info",
 };
 
@@ -90,7 +91,12 @@ export default async function PublicIssuePage({ params }: PageProps) {
   const ownerId = getPublishedReportRow(db, publicId).owner_id;
   const channel = getChannel(issue.channelId);
   const officialEvent =
-    [...issue.events].reverse().find((event) => event.kind === "official") ?? null;
+    [...issue.events].reverse().find((event) => event.kind === "official_source") ??
+    null;
+  const moderatorEvent =
+    [...issue.events]
+      .reverse()
+      .find((event) => event.kind === "moderator_claim") ?? null;
 
   return (
     <div className="container-page py-10 sm:py-14">
@@ -196,9 +202,17 @@ export default async function PublicIssuePage({ params }: PageProps) {
             <h2 className="text-sm font-semibold text-ink">이 기록의 상태</h2>
             <dl className="mt-3 space-y-2 text-xs">
               <div className="flex justify-between gap-3">
-                <dt className="text-muted">공식 확인</dt>
+                <dt className="text-muted">공식 출처 확인</dt>
                 <dd className="text-right font-medium text-ink">
                   {issue.officialStatus ? STATUS_LABEL[issue.officialStatus] : "없음"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">운영자 기록(미검증)</dt>
+                <dd className="text-right font-medium text-ink">
+                  {issue.latestModeratorClaim
+                    ? STATUS_LABEL[issue.latestModeratorClaim.status]
+                    : "없음"}
                 </dd>
               </div>
               <div className="flex justify-between gap-3">
@@ -223,8 +237,9 @@ export default async function PublicIssuePage({ params }: PageProps) {
               </div>
             </dl>
             <p className="mt-3 text-[11px] leading-relaxed text-muted">
-              공식 확인은 운영자가 출처와 함께 기록한 경우에만 표시됩니다. 시민
-              주장은 작성자의 관찰이며 검증되지 않았습니다.
+              공식 출처 확인은 운영자가 확인된 공식 포털 주소와 함께 기록한 경우에만
+              표시됩니다. 정부 시스템과 자동으로 연동된 기록이 아니며, 나머지 운영자
+              기록은 미검증으로 구분됩니다. 시민 주장은 작성자의 관찰입니다.
             </p>
             {officialEvent ? (
               <a
@@ -235,6 +250,18 @@ export default async function PublicIssuePage({ params }: PageProps) {
               >
                 공식 출처 열기 ↗
               </a>
+            ) : null}
+            {issue.officialSourceCheckedAt ? (
+              <p className="mt-1 text-[10px] text-muted">
+                포털 확인 기준일 {issue.officialSourceCheckedAt}
+                {issue.officialSourceHost ? ` · ${issue.officialSourceHost}` : ""}
+              </p>
+            ) : null}
+            {moderatorEvent ? (
+              <p className="mt-2 text-[10px] leading-relaxed text-warn">
+                미검증 운영자 기록
+                {moderatorEvent.sourceHost ? ` · 출처 ${moderatorEvent.sourceHost}` : ""}
+              </p>
             ) : null}
           </section>
 

@@ -29,11 +29,21 @@ async function publishIssue(page: Page, baseURL: string): Promise<string> {
   expect(created.status()).toBe(201);
   const draftId = (await created.json()).data.report.publicId as string;
 
+  const review = await page.request.get(`/api/reports/${draftId}/privacy/text`);
+  expect(review.status()).toBe(200);
+  const textToken = (await review.json()).data.textReview.token as string;
+
   const published = await page.request.post(`/api/reports/${draftId}/publish`, {
     headers: { origin: baseURL, "content-type": "application/json" },
     data: {
       masks: [{ x: 0.2, y: 0.2, w: 0.3, h: 0.3, mode: "solid", source: "manual" }],
-      ack: { privacyReviewed: true, consent: true, noSensitiveContent: false },
+      ack: {
+        privacyReviewed: true,
+        consent: true,
+        noSensitiveContent: false,
+        textReviewed: true,
+        textToken,
+      },
     },
   });
   expect(published.status()).toBe(200);
@@ -127,15 +137,12 @@ test.describe("community and tracking", () => {
 
     // Moderator records an official status with a source.
     await page.goto(`/issues/${publicId}`);
-    await page.getByLabel("공식 상태", { exact: true }).selectOption("in_progress");
-    await page
-      .getByLabel("공식 상태 출처")
-      .fill("https://www.safetyreport.go.kr/");
-    await page
-      .getByLabel("공식 상태 설명")
-      .fill("구청에서 보수 일정을 안내했습니다.");
-    await page.getByRole("button", { name: "공식 상태 기록" }).click();
-    await expect(page.getByText(/공식 상태로 기록했습니다/)).toBeVisible();
+    await page.getByLabel("기록 종류").selectOption("official_source");
+    await page.getByLabel("기록할 상태").selectOption("in_progress");
+    await page.getByLabel("출처 주소").fill("https://www.safetyreport.go.kr/");
+    await page.getByLabel("기록 내용").fill("구청에서 보수 일정을 안내했습니다.");
+    await page.getByRole("button", { name: "상태 기록" }).click();
+    await expect(page.getByText(/공식 출처 기록으로 남겼습니다/)).toBeVisible();
 
     // Owner records a separate claim; it never becomes an official status.
     await switchUser(page, "demo-minji");
@@ -151,7 +158,12 @@ test.describe("community and tracking", () => {
     const statusPanel = anonPage.locator("section", { hasText: "이 기록의 상태" }).first();
     await expect(statusPanel.getByText("처리 중")).toBeVisible();
     await expect(statusPanel.getByText("미해결")).toBeVisible();
-    await expect(statusPanel.getByText("공식 확인", { exact: true })).toBeVisible();
+    await expect(
+      statusPanel.getByText("공식 출처 확인", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      statusPanel.getByText("운영자 기록(미검증)", { exact: true }),
+    ).toBeVisible();
     await expect(statusPanel.getByText("시민 주장", { exact: true })).toBeVisible();
     await expect(anonPage.getByText("구청에서 보수 일정을 안내했습니다.")).toBeVisible();
     await expect(anonPage.getByRole("link", { name: /출처 열기/ }).first()).toHaveAttribute(
@@ -162,7 +174,7 @@ test.describe("community and tracking", () => {
     // The feed lists the issue with its support count and official status.
     await anonPage.goto(`${baseURL}/issues`);
     await expect(anonPage.getByText(/지지 1명/)).toBeVisible();
-    await expect(anonPage.getByText(/공식 · 처리 중/)).toBeVisible();
+    await expect(anonPage.getByText(/공식 출처 확인 · 처리 중/)).toBeVisible();
 
     await anon.close();
   });
@@ -205,7 +217,7 @@ test.describe("community and tracking", () => {
       {
         headers: { origin: baseURL!, "content-type": "application/json" },
         data: {
-          kind: "official",
+          kind: "official_source",
           status: "resolved",
           note: "권한 없이 공식 상태를 기록하는 시도입니다.",
           sourceUrl: "https://www.safetyreport.go.kr/",
@@ -221,13 +233,47 @@ test.describe("community and tracking", () => {
       {
         headers: { origin: baseURL!, "content-type": "application/json" },
         data: {
-          kind: "official",
+          kind: "official_source",
           status: "resolved",
           note: "출처 없이 공식 상태를 기록하는 시도입니다.",
         },
       },
     );
-    expect(noSource.status()).toBe(400);
+    // Missing required fields are structural validation failures (422);
+    // domain rules such as an unregistered host are 400 below.
+    expect(noSource.status()).toBe(422);
+
+    // HTTPS alone is not provenance: an unrelated domain is refused as an
+    // official source even for a moderator.
+    const unrelated = await page.request.post(
+      `/api/reports/${publicId}/status-events`,
+      {
+        headers: { origin: baseURL!, "content-type": "application/json" },
+        data: {
+          kind: "official_source",
+          status: "resolved",
+          note: "관련 없는 출처로 공식 상태를 기록하는 시도입니다.",
+          sourceUrl: "https://example.com/notice/1",
+        },
+      },
+    );
+    expect(unrelated.status()).toBe(400);
+
+    // The same link is allowed only as an unverified moderator note.
+    const unverified = await page.request.post(
+      `/api/reports/${publicId}/status-events`,
+      {
+        headers: { origin: baseURL!, "content-type": "application/json" },
+        data: {
+          kind: "moderator_claim",
+          status: "resolved",
+          note: "담당자와 통화했다고 전달받았습니다. 서면 확인은 없습니다.",
+          sourceUrl: "https://example.com/notice/1",
+        },
+      },
+    );
+    expect(unverified.status()).toBe(201);
+    expect((await unverified.json()).data.event.kind).toBe("moderator_claim");
 
     // A signed-out visitor cannot support.
     const anon = await browser.newContext();

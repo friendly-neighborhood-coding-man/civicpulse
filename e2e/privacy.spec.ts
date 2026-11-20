@@ -31,6 +31,14 @@ async function createDraftViaApi(page: Page, baseURL: string, description: strin
   return body.data.report.publicId as string;
 }
 
+/** Server-issued token binding the publish acknowledgement to exact text. */
+async function fetchTextToken(page: Page, publicId: string): Promise<string> {
+  const response = await page.request.get(`/api/reports/${publicId}/privacy/text`);
+  expect(response.status()).toBe(200);
+  const body = await response.json();
+  return body.data.textReview.token as string;
+}
+
 test.describe("privacy and publication", () => {
   test("mask, preview and publish a redacted report that anyone can read", async ({
     page,
@@ -80,6 +88,9 @@ test.describe("privacy and publication", () => {
       .getByLabel(/사진에서 얼굴·번호판 등 개인정보를 직접 확인/)
       .check();
     await page.getByLabel(/이 제보를 공개하는 데 동의합니다/).check();
+    // The public text has its own, separate acknowledgement.
+    await expect(publishButton).toBeDisabled();
+    await page.getByLabel(/공개될 제목과 본문을 직접 읽었습니다/).check();
     await expect(publishButton).toBeEnabled();
 
     await publishButton.click();
@@ -128,12 +139,21 @@ test.describe("privacy and publication", () => {
       baseURL!,
       "공개 동의 없이 게시를 시도하면 거부되어야 하는 충분히 긴 설명입니다.",
     );
+    const textToken = await fetchTextToken(page, draftId);
 
     const mask = { x: 0.2, y: 0.2, w: 0.3, h: 0.3, mode: "pixelate", source: "manual" };
 
     const noConsent = await page.request.post(`/api/reports/${draftId}/publish`, {
       headers: { origin: baseURL!, "content-type": "application/json" },
-      data: { masks: [mask], ack: { privacyReviewed: true, consent: false } },
+      data: {
+        masks: [mask],
+        ack: {
+          privacyReviewed: true,
+          consent: false,
+          textReviewed: true,
+          textToken,
+        },
+      },
     });
     expect(noConsent.status()).toBe(409);
 
@@ -141,7 +161,13 @@ test.describe("privacy and publication", () => {
       headers: { origin: baseURL!, "content-type": "application/json" },
       data: {
         masks: [],
-        ack: { privacyReviewed: true, consent: true, noSensitiveContent: false },
+        ack: {
+          privacyReviewed: true,
+          consent: true,
+          noSensitiveContent: false,
+          textReviewed: true,
+          textToken,
+        },
       },
     });
     expect(noMasks.status()).toBe(409);
@@ -150,7 +176,12 @@ test.describe("privacy and publication", () => {
       headers: { origin: baseURL!, "content-type": "application/json" },
       data: {
         masks: [{ ...mask, x: 0.95 }],
-        ack: { privacyReviewed: true, consent: true },
+        ack: {
+          privacyReviewed: true,
+          consent: true,
+          textReviewed: true,
+          textToken,
+        },
       },
     });
     expect(badMask.status()).toBe(422);
@@ -158,7 +189,15 @@ test.describe("privacy and publication", () => {
     // Foreign origin is rejected even with valid consents.
     const foreign = await page.request.post(`/api/reports/${draftId}/publish`, {
       headers: { origin: "https://evil.example", "content-type": "application/json" },
-      data: { masks: [mask], ack: { privacyReviewed: true, consent: true } },
+      data: {
+        masks: [mask],
+        ack: {
+          privacyReviewed: true,
+          consent: true,
+          textReviewed: true,
+          textToken,
+        },
+      },
     });
     expect(foreign.status()).toBe(403);
 
@@ -168,7 +207,15 @@ test.describe("privacy and publication", () => {
     await expect(page.locator("#demo-identity")).toHaveValue("demo-hana");
     const otherUser = await page.request.post(`/api/reports/${draftId}/publish`, {
       headers: { origin: baseURL!, "content-type": "application/json" },
-      data: { masks: [mask], ack: { privacyReviewed: true, consent: true } },
+      data: {
+        masks: [mask],
+        ack: {
+          privacyReviewed: true,
+          consent: true,
+          textReviewed: true,
+          textToken,
+        },
+      },
     });
     expect(otherUser.status()).toBe(404);
 
@@ -194,5 +241,85 @@ test.describe("privacy and publication", () => {
     expect(publicPhoto.status()).toBe(404);
     const publicJson = await page.request.get(`/api/public/reports/${draftId}`);
     expect(publicJson.status()).toBe(404);
+  });
+
+  test("requires reviewing the public text and flags synthetic personal information", async ({
+    page,
+    baseURL,
+  }) => {
+    await signIn(page, "박준");
+    const draftId = await createDraftViaApi(
+      page,
+      baseURL!,
+      "연락처 010-9876-5432 로 연락 주세요. 보도 블록이 들떠 있어 위험합니다.",
+    );
+    const mask = { x: 0.2, y: 0.2, w: 0.3, h: 0.3, mode: "solid", source: "manual" };
+    const firstToken = await fetchTextToken(page, draftId);
+    let token = firstToken;
+    const publish = (ack: Record<string, boolean>) =>
+      page.request.post(`/api/reports/${draftId}/publish`, {
+        headers: { origin: baseURL!, "content-type": "application/json" },
+        data: { masks: [mask], ack: { ...ack, textToken: token } },
+      });
+
+    // Photo acknowledgements alone cannot publish copied text.
+    const noTextReview = await publish({
+      privacyReviewed: true,
+      consent: true,
+      textReviewed: false,
+    });
+    expect(noTextReview.status()).toBe(409);
+    expect(JSON.stringify(await noTextReview.json())).toContain("제목과 본문");
+
+    // The heuristic scan finds the synthetic phone number and demands a decision.
+    const unacknowledged = await publish({
+      privacyReviewed: true,
+      consent: true,
+      textReviewed: true,
+      textFindingsReviewed: false,
+    });
+    expect(unacknowledged.status()).toBe(409);
+    const failure = await unacknowledged.json();
+    expect(failure.error.details.textFindings.total).toBeGreaterThan(0);
+    expect(failure.error.details.textFindings.kinds).toContain("phone");
+    // The response never echoes the matched value.
+    expect(JSON.stringify(failure)).not.toContain("9876");
+
+    // The owner sees the finding in the review UI and can correct the text.
+    await page.goto(`/reports/${draftId}`);
+    await expect(page.getByText(/개인정보로 보일 수 있는 표현/)).toBeVisible();
+    await expect(page.getByLabel(/표시된 개인정보 의심 항목을 확인/)).toBeVisible();
+    await page
+      .getByLabel("제보 본문")
+      .fill("현황\n보도 블록이 들떠 있습니다.\n\n위치\n서울 마포구");
+    await page.getByRole("button", { name: "변경 저장" }).click();
+    await expect(
+      page.getByText(/정해진 형식\(전화번호·이메일 등\)으로 찾을 수 있는 항목은 없었습니다/),
+    ).toBeVisible();
+
+    // The acknowledgement from the old text is rejected after the edit.
+    token = await fetchTextToken(page, draftId);
+    expect(token).not.toBe(firstToken);
+    const stale = await page.request.post(`/api/reports/${draftId}/publish`, {
+      headers: { origin: baseURL!, "content-type": "application/json" },
+      data: {
+        masks: [mask],
+        ack: {
+          privacyReviewed: true,
+          consent: true,
+          textReviewed: true,
+          textToken: firstToken,
+        },
+      },
+    });
+    expect(stale.status()).toBe(409);
+
+    // With clean text and the current token, reading it is enough.
+    const published = await publish({
+      privacyReviewed: true,
+      consent: true,
+      textReviewed: true,
+    });
+    expect(published.status()).toBe(200);
   });
 });

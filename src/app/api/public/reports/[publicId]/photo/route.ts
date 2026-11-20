@@ -37,7 +37,8 @@ export async function GET(_request: Request, context: RouteContext) {
       headers: {
         "content-type": media.mime,
         "content-length": String(bytes.byteLength),
-        "cache-control": "public, max-age=60",
+        // Withdrawal/takedown must not be defeated by a cached public image.
+        "cache-control": "no-store",
         "content-disposition": "inline",
         "x-content-type-options": "nosniff",
       },

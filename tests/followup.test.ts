@@ -20,6 +20,7 @@ import { publishReport } from "@/lib/domain/publication";
 import { createDraftReport } from "@/lib/domain/reports";
 import { toPublicUser, type PublicUser } from "@/lib/domain/users";
 import { ApiError } from "@/lib/http/errors";
+import { publicTextReviewToken } from "@/lib/privacy/text";
 import { SQUARE_MASK, makeTestImage } from "./helpers/images";
 
 const dirs: string[] = [];
@@ -46,7 +47,16 @@ const OWNER = actor(0);
 const NEIGHBOUR = actor(1);
 const MODERATOR = actor(3);
 
-const ACK = { privacyReviewed: true, consent: true, noSensitiveContent: false };
+function ackFor(row: { title: string; description: string }) {
+  return {
+    privacyReviewed: true,
+    consent: true,
+    noSensitiveContent: false,
+    textReviewed: true,
+    textFindingsReviewed: false,
+    textToken: publicTextReviewToken(row),
+  };
+}
 const PUBLISHED_AT = new Date("2026-11-01T00:00:00.000Z");
 
 async function publishedReport(db: ReturnType<typeof openDatabase>) {
@@ -71,7 +81,7 @@ async function publishedReport(db: ReturnType<typeof openDatabase>) {
     },
     image,
   });
-  await publishReport(db, OWNER, row.public_id, { masks: [SQUARE_MASK], ack: ACK }, PUBLISHED_AT);
+  await publishReport(db, OWNER, row.public_id, { masks: [SQUARE_MASK], ack: ackFor(row) }, PUBLISHED_AT);
   return row;
 }
 
@@ -136,7 +146,7 @@ describe("follow-up eligibility", () => {
       MODERATOR,
       row.public_id,
       {
-        kind: "official",
+        kind: "official_source",
         status: "resolved",
         note: "보수 완료 안내를 받았습니다.",
         sourceUrl: "https://www.safetyreport.go.kr/",
@@ -165,7 +175,7 @@ describe("follow-up drafts", () => {
       MODERATOR,
       row.public_id,
       {
-        kind: "official",
+        kind: "official_source",
         status: "acknowledged",
         note: "접수 확인을 받았습니다.",
         sourceUrl: "https://www.safetyreport.go.kr/",
@@ -201,7 +211,7 @@ describe("follow-up drafts", () => {
       name: "안전신문고",
       url: "https://www.safetyreport.go.kr/",
     });
-    expect(followup.text).toContain("공식 확인");
+    expect(followup.text).toContain("공식 출처 확인");
     expect(followup.text).toContain("시민 주장");
     expect(followup.text).toContain("CivicPulse가 자동으로 전송하지 않습니다");
     // No invented contact details: only the registry URL, no email or phone.
@@ -297,6 +307,48 @@ describe("follow-up drafts", () => {
       new Date("2026-11-28T00:00:00.000Z"),
     );
     expect(afterCooldown.eligible).toBe(true);
+    db.close();
+  });
+
+  it("does not treat an unverified moderator note as an official resolution", async () => {
+    const { db } = tempDb();
+    const row = await publishedReport(db);
+    await approvedEvidence(db, row.public_id, new Date("2026-11-02T00:00:00.000Z"));
+
+    addStatusEvent(
+      db,
+      MODERATOR,
+      row.public_id,
+      {
+        kind: "moderator_claim",
+        status: "resolved",
+        note: "담당자가 처리했다고 구두로 전달했습니다.",
+        sourceUrl: "https://example.com/notice/1",
+      },
+      new Date("2026-11-10T00:00:00.000Z"),
+    );
+
+    const eligibility = getFollowupEligibility(
+      db,
+      row.id,
+      new Date("2026-11-20T00:00:00.000Z"),
+    );
+    expect(eligibility.eligible).toBe(true);
+    expect(eligibility.reasons.join(" ")).not.toContain("해결");
+
+    const { followup } = requestFollowup(
+      db,
+      OWNER,
+      row.public_id,
+      new Date("2026-11-20T00:00:00.000Z"),
+    );
+    // Carried into the draft only as an unverified note, never as an official
+    // status.
+    expect(followup.body.official).toBeNull();
+    expect(
+      followup.body.claims.some((claim) => claim.kind === "moderator_claim"),
+    ).toBe(true);
+    expect(followup.text).toContain("운영자 기록 · 미검증");
     db.close();
   });
 });

@@ -145,9 +145,11 @@ export function getFollowupEligibility(
   const reasons: string[] = [];
 
   const events = listStatusEvents(db, reportId);
+  // Only a verified official-portal citation counts as resolution. A moderator's
+  // unverified note must not silently disable the citizen's follow-up path.
   const officialResolved = [...events]
     .reverse()
-    .find((event) => event.kind === "official" && event.status === "resolved");
+    .find((event) => event.kind === "official_source" && event.status === "resolved");
   if (officialResolved) {
     reasons.push("공식 확인으로 해결된 제보입니다. 후속 요청이 필요하지 않습니다.");
   }
@@ -222,12 +224,22 @@ export function requestFollowup(
     throw conflict(eligibility.reasons.join(" "), { reasons: eligibility.reasons });
   }
 
-  const official = [...listStatusEvents(db, report.id)]
+  const events = listStatusEvents(db, report.id);
+  const official = [...events]
     .reverse()
-    .find((event) => event.kind === "official");
-  const claims = listStatusEvents(db, report.id)
-    .filter((event) => event.kind === "user_claim")
-    .map((event) => ({ status: event.status, note: event.note, createdAt: event.created_at }));
+    .find((event) => event.kind === "official_source");
+  // Unverified moderator notes are included, but labelled as such: omitting them
+  // would hide context, and calling them official would be a false claim.
+  const claims = events
+    .filter(
+      (event) => event.kind === "user_claim" || event.kind === "moderator_claim",
+    )
+    .map((event) => ({
+      kind: event.kind,
+      status: event.status,
+      note: event.note,
+      createdAt: event.created_at,
+    }));
   const evidence = listApprovedEvidence(db, report.id).filter(
     (item) =>
       new Date(item.createdAt).getTime() >
@@ -247,6 +259,7 @@ export function requestFollowup(
           status: official.status,
           note: official.note,
           sourceUrl: official.source_url,
+          sourceHost: official.source_host,
           createdAt: official.created_at,
         }
       : null,

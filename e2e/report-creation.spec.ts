@@ -37,7 +37,8 @@ test.describe("report creation", () => {
     await expect(page.getByAltText("제보 사진 (비공개)")).toBeVisible();
 
     const url = page.url();
-    const titleInput = page.getByLabel("제목");
+    // Exact: the privacy flow also exposes a region labelled "공개될 제목과 본문".
+    const titleInput = page.getByLabel("제목", { exact: true });
     await expect(titleInput).not.toHaveValue("");
 
     await titleInput.fill("시장 입구 쓰레기 무단투기 (확인 필요)");
@@ -45,7 +46,7 @@ test.describe("report creation", () => {
     await expect(page.getByRole("button", { name: "저장됨" })).toBeVisible();
 
     await page.reload();
-    await expect(page.getByLabel("제목")).toHaveValue(
+    await expect(page.getByLabel("제목", { exact: true })).toHaveValue(
       "시장 입구 쓰레기 무단투기 (확인 필요)",
     );
     await expect(page.getByText("검증되지 않음")).toHaveCount(0);
