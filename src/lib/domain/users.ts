@@ -1,6 +1,6 @@
 import type { Db } from "../db/connection.ts";
 import { all, one, run } from "../db/query.ts";
-import type { UserRecord, UserRole } from "../db/seed.ts";
+import { DEMO_USERS, type UserRecord, type UserRole } from "../db/seed.ts";
 import { hashPassword } from "../auth/password.ts";
 import { internalId } from "../ids.ts";
 
@@ -33,13 +33,27 @@ export function getUserById(db: Db, id: string): UserRecord | undefined {
   );
 }
 
-export function listUsers(db: Db): PublicUser[] {
-  return all<UserRecord>(
+/**
+ * The fixed synthetic identities the demo switcher may offer.
+ *
+ * Deliberately not "every live account": password accounts provisioned by an
+ * operator must never be listed by the demo provider, even if a deployment is
+ * switched back to demo mode. The returned order and membership come from
+ * `DEMO_USERS`; deleted demo accounts are omitted.
+ */
+export function listDemoUsers(db: Db): PublicUser[] {
+  const placeholders = DEMO_USERS.map(() => "?").join(",");
+  const rows = all<UserRecord>(
     db,
     `SELECT * FROM users
-      WHERE deleted_at IS NULL
-      ORDER BY role DESC, display_name ASC`,
-  ).map(toPublicUser);
+      WHERE deleted_at IS NULL AND id IN (${placeholders})`,
+    DEMO_USERS.map((user) => user.id),
+  );
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return DEMO_USERS.flatMap((demo) => {
+    const row = byId.get(demo.id);
+    return row ? [toPublicUser(row)] : [];
+  });
 }
 
 export function normalizeEmail(email: string): string {

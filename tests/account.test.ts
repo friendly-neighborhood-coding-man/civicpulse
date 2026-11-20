@@ -16,6 +16,7 @@ import {
 import { getPublicReport, publishReport } from "@/lib/domain/publication";
 import { createDraftReport } from "@/lib/domain/reports";
 import { getFollowupEligibility } from "@/lib/domain/followup";
+import { processMediaCleanup } from "@/lib/domain/takedown";
 import { toPublicUser, type PublicUser } from "@/lib/domain/users";
 import { ApiError } from "@/lib/http/errors";
 import { publicTextReviewToken } from "@/lib/privacy/text";
@@ -189,6 +190,121 @@ describe("account deletion", () => {
 
     // Follow-up creation is impossible after deletion (public report removed).
     expect(() => getFollowupEligibility(db, ownPublic.id)).toThrow(ApiError);
+    db.close();
+  });
+
+  it("deletes every media role of a published report immediately", async () => {
+    const { db, dir } = tempDb();
+    const ownPublic = await published(db, OWNER);
+    const reportRow = one<{ id: string }>(
+      db,
+      "SELECT id FROM reports WHERE public_id = ?",
+      [ownPublic.public_id],
+    );
+    expect(reportRow).toBeTruthy();
+    const reportId = reportRow!.id;
+    const media = all<{
+      role: "original" | "working" | "public";
+      storage_key: string;
+    }>(db, "SELECT role, storage_key FROM report_media WHERE report_id = ?", [reportId]);
+    expect(media.map((row) => row.role).sort()).toEqual([
+      "original",
+      "public",
+      "working",
+    ]);
+
+    const filePath = (row: { role: string; storage_key: string }) =>
+      path.join(
+        dir,
+        "media",
+        row.role === "public" ? "public" : "private",
+        row.storage_key,
+      );
+    for (const row of media) expect(fs.existsSync(filePath(row))).toBe(true);
+
+    const result = await deleteAccount(db, OWNER);
+    expect(result.reportsWithdrawn).toBe(1);
+    expect(result.filesQueued).toBe(3);
+    expect(result.cleanupPending).toBe(0);
+
+    // The public derivative and both private copies are gone now, not after the
+    // 90-day retention window.
+    for (const row of media) expect(fs.existsSync(filePath(row))).toBe(false);
+
+    // No media row survives to point at a missing file.
+    expect(
+      all(db, "SELECT id FROM report_media WHERE report_id = ?", [reportId]),
+    ).toHaveLength(0);
+
+    // Cleanup records are kept (keys only) so a retry stays idempotent.
+    const cleanup = all<{ completed_at: string | null }>(
+      db,
+      "SELECT completed_at FROM media_cleanup",
+    );
+    expect(cleanup).toHaveLength(3);
+    expect(cleanup.every((row) => row.completed_at !== null)).toBe(true);
+
+    // Documented retention exception: the removed report row (text and audit
+    // metadata) is kept until the retention job purges it.
+    const retained = one<{ state: string; title: string }>(
+      db,
+      "SELECT state, title FROM reports WHERE id = ?",
+      [reportId],
+    );
+    expect(retained?.state).toBe("removed");
+    expect(retained?.title.length).toBeGreaterThan(0);
+    db.close();
+  });
+
+  it("keeps failed account media deletions observable and completes them on retry", async () => {
+    const { db, dir } = tempDb();
+    const ownPublic = await published(db, OWNER);
+    const reportRow = one<{ id: string }>(
+      db,
+      "SELECT id FROM reports WHERE public_id = ?",
+      [ownPublic.public_id],
+    );
+    const reportId = reportRow!.id;
+    const media = all<{ role: string; storage_key: string }>(
+      db,
+      "SELECT role, storage_key FROM report_media WHERE report_id = ?",
+      [reportId],
+    );
+    const filePath = (row: { role: string; storage_key: string }) =>
+      path.join(
+        dir,
+        "media",
+        row.role === "public" ? "public" : "private",
+        row.storage_key,
+      );
+
+    const result = await deleteAccount(db, OWNER, new Date(), {
+      removeFile: async () => {
+        throw new Error("simulated disk failure");
+      },
+    });
+    expect(result.filesQueued).toBe(3);
+    expect(result.cleanupPending).toBe(3);
+    for (const row of media) expect(fs.existsSync(filePath(row))).toBe(true);
+
+    const pending = all<{
+      attempts: number;
+      last_error: string | null;
+    }>(
+      db,
+      "SELECT attempts, last_error FROM media_cleanup WHERE completed_at IS NULL",
+    );
+    expect(pending).toHaveLength(3);
+    expect(
+      pending.every((row) => row.attempts >= 1 && row.last_error?.includes("simulated")),
+    ).toBe(true);
+
+    // The durable queue survives the report remaining removed and is retried by
+    // the normal reconciliation path.
+    const retried = await processMediaCleanup(db);
+    expect(retried.failed).toBe(0);
+    expect(retried.pending).toBe(0);
+    for (const row of media) expect(fs.existsSync(filePath(row))).toBe(false);
     db.close();
   });
 });

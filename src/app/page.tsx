@@ -1,11 +1,12 @@
 import Link from "next/link";
 
 import IdentitySwitcher from "@/components/IdentitySwitcher";
+import { getAuthMode } from "@/lib/auth/mode";
 import { getSessionUser } from "@/lib/auth/session";
 import { getAssistantMode } from "@/lib/config";
 import { getDb, getSchemaVersion } from "@/lib/db/connection";
 import { listOwnerReports } from "@/lib/domain/reports";
-import { listUsers } from "@/lib/domain/users";
+import { listDemoUsers } from "@/lib/domain/users";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +57,10 @@ const TRUST_LEVELS = [
 export default async function HomePage() {
   const db = getDb();
   const user = await getSessionUser(db);
-  const users = listUsers(db);
+  const mode = getAuthMode();
+  // The password provider has no directory and no switcher; only demo mode may
+  // receive the fixed synthetic identities.
+  const users = mode === "demo" ? listDemoUsers(db) : [];
   const schemaVersion = getSchemaVersion(db);
   const assistantMode = getAssistantMode();
   const myReports = user ? listOwnerReports(db, user).slice(0, 2) : [];
@@ -84,13 +88,20 @@ export default async function HomePage() {
               >
                 새 제보 시작하기
               </Link>
-            ) : (
+            ) : mode === "demo" ? (
               <a
                 href="#identity"
                 className="inline-flex h-11 items-center rounded-full bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-strong"
               >
                 데모 사용자로 시작하기
               </a>
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex h-11 items-center rounded-full bg-accent px-5 text-sm font-semibold text-white transition hover:bg-accent-strong"
+              >
+                로그인하고 시작하기
+              </Link>
             )}
             <Link
               href="/issues"
@@ -122,6 +133,37 @@ export default async function HomePage() {
           </div>
         </div>
 
+        {mode === "password" ? (
+          <div
+            id="identity"
+            className="card scroll-mt-24 p-6 sm:p-7"
+            aria-labelledby="identity-heading"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="identity-heading" className="text-lg font-semibold text-ink">
+                  계정 세션
+                </h2>
+                <p className="mt-1 text-sm text-muted">
+                  운영자가 발급한 계정으로 로그인합니다.
+                </p>
+              </div>
+              <span className="rounded-full border border-line bg-surface-muted px-2.5 py-1 text-[11px] font-semibold text-muted">
+                계정 기반
+              </span>
+            </div>
+            <p className="mt-5 text-xs leading-relaxed text-muted">
+              이 배포는 사용자 목록이나 계정 전환을 제공하지 않습니다. 다른
+              계정의 이름이나 역할은 어떤 화면에도 표시되지 않습니다.
+            </p>
+            <Link
+              href={user ? "/account" : "/login"}
+              className="mt-5 inline-flex h-10 items-center rounded-full bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent-strong"
+            >
+              {user ? "내 계정 관리" : "로그인"}
+            </Link>
+          </div>
+        ) : (
         <div
           id="identity"
           className="card scroll-mt-24 p-6 sm:p-7"
@@ -183,6 +225,7 @@ export default async function HomePage() {
             </div>
           ) : null}
         </div>
+        )}
       </section>
 
       <section

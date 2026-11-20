@@ -40,7 +40,7 @@ export default async function ReportDraftPage({ params }: PageProps) {
       <div className="container-page py-14">
         <DemoSignInCard
           heading="이 초안은 비공개입니다"
-          body="초안은 작성자만 열람할 수 있습니다. 합성 데모 사용자를 선택해 주세요."
+          body="초안은 작성자만 열람할 수 있습니다. 로그인해 주세요."
         />
       </div>
     );

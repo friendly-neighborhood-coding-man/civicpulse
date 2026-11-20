@@ -53,10 +53,11 @@ export default function AccountDeletion({ requiresPassword }: { requiresPassword
     <div className="rounded-2xl border border-danger/30 bg-danger-soft/40 p-5">
       <h2 className="text-sm font-semibold text-danger">계정 삭제</h2>
       <ul className="mt-2 space-y-1 text-[11px] leading-relaxed text-ink-soft">
-        <li>공개한 제보는 즉시 공개 중단되고, 사진·근거 파일이 삭제 대기열에 들어갑니다.</li>
+        <li>공개한 제보는 즉시 공개 중단되고, 공개 사진·원본·작업 사진과 근거 파일이 삭제 대기열에 들어갑니다. 실패한 삭제는 재시도됩니다.</li>
         <li>비공개 초안, 이 계정의 근거·지지·후속 초안·상태 기록이 삭제됩니다.</li>
         <li>작성자 표시는 탈퇴한 사용자로 익명화되며, 이메일과 비밀번호는 지워집니다.</li>
-        <li>기록 보존을 위해 최소 감사 행이 남을 수 있으며, 남은 공개 기록은 없습니다.</li>
+        <li>공개 중단된 제보의 기록(제목·본문·상태 이력)은 감사 목적으로 보존 기간(기본 90일) 뒤 삭제됩니다.</li>
+        <li>외부 백업이나 캐시에 이미 복제된 사본은 이 앱에서 지울 수 없습니다.</li>
       </ul>
       {requiresPassword ? (
         <div className="mt-3">

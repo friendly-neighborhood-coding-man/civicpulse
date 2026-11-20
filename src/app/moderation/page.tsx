@@ -17,7 +17,7 @@ export default async function ModerationPage() {
   if (!user) {
     return (
       <div className="container-page py-14">
-        <DemoSignInCard heading="검토 화면은 데모 운영자로 확인할 수 있습니다" />
+        <DemoSignInCard heading="검토 화면은 운영자 계정으로 로그인해야 합니다" />
       </div>
     );
   }
@@ -29,8 +29,8 @@ export default async function ModerationPage() {
           <h1 className="text-lg font-semibold text-ink">접근할 수 없습니다</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             추가 근거 검토는 운영자 역할만 사용할 수 있습니다. 현재{" "}
-            {user.displayName} 님은 시민 역할입니다. 상단에서 &lsquo;데모
-            운영자&rsquo;를 선택해 검토 흐름을 확인할 수 있습니다.
+            {user.displayName} 님은 시민 역할입니다. 운영자 계정으로 로그인하면
+            검토 흐름을 사용할 수 있습니다.
           </p>
           <Link
             href="/issues"

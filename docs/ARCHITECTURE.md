@@ -1,6 +1,6 @@
 # CivicPulse architecture (living document)
 
-Last updated: 2026-11-19 (stage 05 — follow-up workflow).
+Last updated: 2026-11-20 (stage 11 — auth privacy corrections).
 
 ## Stack
 
@@ -305,18 +305,38 @@ labels say **공식 포털 인용** rather than "공식 확인".
   `docs/DEPLOYMENT.md`; Toss login/payments are documented as blocked in
   `docs/TOSS.md` and are not claimed to work.
 
-## Verification status (stage 10)
+## Auth privacy corrections (stage 11)
+
+- **No directory outside demo mode.** `buildSessionView` is the only shaper of
+  `GET /api/session`. Password mode returns `users: []` and the acting user (or
+  `null`); demo mode returns exactly the predefined `DEMO_USERS` rows and never a
+  provisioned password account. `listUsers` (every live account) was removed so a
+  later page cannot reintroduce the leak. The home page, signed-out cards and
+  header are mode-aware; `/api/health` derives `demoMode` from `authMode`.
+- **Logout verifies the response.** `DELETE /api/session` is intentionally not
+  rate limited: a 429 must not keep a session the person ended. The client helper
+  `requestSignOut` requires 2xx + `ok:true`, shows 429/500/network errors, and only
+  then navigates. Success expires `cp_session`. The signed token itself remains
+  valid until its 30-day expiry if copied (no revocation list).
+- **Account deletion ends withdrawal's private-media exception.** Published
+  reports are withdrawn, then `original` and `working` files are queued immediately
+  with their media rows removed; failed deletes stay durable and observable. The
+  removed report row, anonymised user tombstone and completed cleanup keys are the
+  documented retention exceptions in `docs/ACCOUNT_DELETION.md`.
+
+## Verification status (stage 11)
 
 | Check | Result |
 |---|---|
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS |
-| `npm test` | PASS — 137 tests / 24 files |
-| `npm run build` | PASS (production build used by E2E) |
-| `npm run e2e` | PASS — 17 Chromium tests against `next start` |
-| Visual review | privacy text panel (desktop 1280px, mobile 390px), public provenance panel, withdrawn owner page |
+| `npm test` | PASS — 149 tests / 26 files |
+| `npm run build` | PASS (production build used by both E2E suites) |
+| `npm run e2e` | PASS — 17 Chromium tests against `next start` (demo mode) |
+| `npm run e2e:password` | PASS — 3 Chromium tests against a password-mode `next start` |
+| Base reproduction | `27dcf10` returned both provisioned accounts (ids, handles, roles) and `demo: true` unauthenticated |
 
-## Known limitations (stage 10)
+## Known limitations (stage 11)
 
 - Text scanning is pattern-based: it misses names without honorifics, obfuscated
   digits, unusual addresses, and can false-positive. Human review is the control.
@@ -324,16 +344,17 @@ labels say **공식 포털 인용** rather than "공식 확인".
   content is not fetched or verified, and no government API is integrated.
 - Withdrawal removes public visibility and app-served media, not every copy: browser
   caches, screenshots, search engines, backups and CDN logs are outside this app.
-  There is no scheduled purge, legal hold, account deletion or export.
 - A media key that can never be deleted stays pending with its error visible; there
   is no terminal abandon state or alerting, so an operator must inspect
-  `mediaCleanupPending` (basis for the stage-10 retention work).
-- Removed reports keep private originals, masks and timeline rows indefinitely.
+  `mediaCleanupPending`.
+- Withdrawal keeps a removed report's private originals, masks and timeline until the
+  retention job (or account deletion) removes them. Without an external scheduler the
+  row and non-account-deleted originals remain indefinitely.
 - Demo cookie identity, single-node SQLite, local-filesystem media and an in-process
   rate limiter remain the deployment boundaries (no edge/Workers target). Password mode
   has no registration, reset, MFA or selective session revocation.
-- Retention runs only when an external scheduler invokes `npm run retention`; without
-  one, removed content is retained indefinitely. Backups are outside the app.
-- Account deletion keeps an anonymised tombstone and completed media-queue rows for
-  referential integrity; it cannot reach backups or external caches.
+- Logout expires this browser's cookie only; a copied 30-day token stays valid.
+- Account deletion keeps the removed report row (text, masks, timeline) until the
+  retention window, plus an anonymised tombstone and completed media-queue keys; it
+  cannot reach backups or external caches.
 - No public pagination, no edit/revision flow for published text, no notification.

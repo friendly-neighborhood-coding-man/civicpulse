@@ -64,17 +64,28 @@ the database and media would disappear or the native modules would not load.
   There is no public sign-up, no email reset and no OAuth provider (credentials and
   app registration are unavailable and are not faked).
 - Sessions are HMAC-signed cookies with a 30-day expiry; switching modes invalidates
-  password-less demo sessions.
+  password-less demo sessions. In password mode `GET /api/session` returns no account
+  directory (not even other ids or roles) and `/api/health` reports `authMode`.
+- Logout expires this browser's cookie and is not rate limited (a 429 must never keep a
+  session the person ended). A copied token remains valid until expiry: there is no
+  server-side revocation list.
 
 ## Retention and deletion
 
-- Withdrawal closes public routes immediately and queues files for deletion.
+- Withdrawal closes public routes immediately and queues public/evidence files.
+- Account deletion withdraws published reports, then queues the private `original` and
+  `working` copies immediately as well, removes drafts and personal rows, anonymises
+  the identity and reports `cleanupPending`. The removed report row (text, masks,
+  timeline) remains until retention. Exact role-by-role policy:
+  [ACCOUNT_DELETION.md](ACCOUNT_DELETION.md).
 - `CIVICPULSE_RETENTION_DAYS` (default 90, bounded 1–3650) controls when removed
   reports and rejected evidence are purged in full.
 - Run the purge with `npm run retention` from cron/systemd, or
-  `POST /api/moderation/retention` as a moderator. There is no in-process scheduler.
+  `POST /api/moderation/retention` as a moderator. There is no in-process scheduler;
+  without it, removed report rows and any retained originals stay indefinitely.
 - `GET /api/health` exposes `mediaCleanupPending` and `retentionEligible` counts as the
-  operational signal. Both should be 0 in steady state.
+  operational signal. Both should be 0 in steady state. A pending media key has no
+  alerting beyond this count and the structured server log.
 - Backups are outside the app: a database snapshot or media copy can retain deleted
   content. Document and shorten the backup window if deletion promises matter.
 

@@ -127,7 +127,7 @@ test.describe("report creation", () => {
 
     await page.goto("/reports");
     await expect(
-      page.getByRole("heading", { name: "내 제보를 보려면 데모 사용자를 선택하세요" }),
+      page.getByRole("heading", { name: "내 제보를 보려면 로그인하세요" }),
     ).toBeVisible();
   });
 });

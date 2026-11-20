@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "bash scripts/e2e.sh",
+    "e2e:password": "bash scripts/e2e-password.sh",
     "seed": "node scripts/seed.ts",
     "user:create": "node scripts/create-user.ts",
     "retention": "node scripts/retention.ts",

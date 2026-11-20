@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { deleteAccount } from "@/lib/domain/account";
 import { openDatabase } from "@/lib/db/connection";
 import { all, one } from "@/lib/db/query";
 import { DEMO_USERS } from "@/lib/db/seed";
@@ -191,6 +192,29 @@ describe("retention purge", () => {
     });
     expect(result.purgedReports).toBe(0);
     expect(one(db, "SELECT id FROM reports WHERE id = ?", [row.id])).toBeTruthy();
+    db.close();
+  });
+
+  it("purges the row left by account deletion without reviving its media", async () => {
+    const { db, dir } = tempDb();
+    const row = await published(db);
+    const privateDir = path.join(dir, "media", "private");
+    const before = fs.readdirSync(privateDir).length;
+
+    await deleteAccount(db, OWNER, new Date("2026-03-01T00:00:00.000Z"));
+    // Account deletion removes the private originals immediately.
+    expect(fs.readdirSync(privateDir)).toHaveLength(before - 2);
+
+    const result = await runRetention(db, {
+      now: new Date("2026-06-01T00:00:00.000Z"),
+      days: 30,
+    });
+    expect(result.purgedReports).toBe(1);
+    expect(result.cleanupPending).toBe(0);
+    expect(one(db, "SELECT id FROM reports WHERE id = ?", [row.id])).toBeUndefined();
+    // Retention has no remaining media rows to enqueue and does not recreate
+    // files that account deletion already removed.
+    expect(fs.readdirSync(privateDir)).toHaveLength(before - 2);
     db.close();
   });
 });
