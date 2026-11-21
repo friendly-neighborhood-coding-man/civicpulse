@@ -32,7 +32,7 @@ export default async function MyReportsPage() {
   if (!user) {
     return (
       <div className="container-page py-14">
-        <DemoSignInCard heading="내 제보를 보려면 데모 사용자를 선택하세요" />
+        <DemoSignInCard heading="내 제보를 보려면 로그인하세요" />
       </div>
     );
   }

@@ -12,9 +12,14 @@ import type { MediaScope } from "../services/media-store.ts";
  *   account's identity, storage keys, precise coordinates or private drafts;
  * - deletion removes the account's content and identity, but keeps the
  *   anonymised user row because historical rows reference it. Published reports
- *   are withdrawn first (public visibility closes immediately), then the
- *   account's own files are queued through the same durable cleanup used by
- *   takedown.
+ *   are withdrawn first (public visibility closes immediately), then *every*
+ *   owned file is queued through the same durable cleanup used by takedown.
+ *
+ * Account deletion deliberately ends withdrawal's "keep the private originals"
+ * exception: the citizen asked for deletion, so the original and working copies
+ * are queued immediately rather than waiting for the retention window. Removed
+ * report rows (public text, masks, timeline) stay until retention purges them so
+ * moderator actions remain auditable; see docs/ACCOUNT_DELETION.md.
  */
 
 export type AccountExport = {
@@ -252,10 +257,45 @@ export type AccountDeletionResult = {
   cleanupPending: number;
 };
 
+/**
+ * Queue the private originals/working copies of one report and drop their media
+ * rows, so no page can reference bytes that are already queued for deletion.
+ */
+function queueOwnedPrivateMedia(db: Db, reportId: string, now: Date): number {
+  const media = all<{ storage_key: string }>(
+    db,
+    `SELECT storage_key FROM report_media
+      WHERE report_id = ? AND role IN ('original','working')`,
+    [reportId],
+  );
+  if (media.length === 0) return 0;
+  const queued = queueMediaDeletion(
+    db,
+    reportId,
+    media.map((item) => ({
+      scope: "private" as const,
+      storage_key: item.storage_key,
+    })),
+    now,
+  );
+  run(
+    db,
+    "DELETE FROM report_media WHERE report_id = ? AND role IN ('original','working')",
+    [reportId],
+  );
+  return queued;
+}
+
+export type AccountDeletionOptions = {
+  /** Test seam for a failing filesystem; the default removes from local media. */
+  removeFile?: (scope: MediaScope, key: string) => Promise<void>;
+};
+
 export async function deleteAccount(
   db: Db,
   actor: PublicUser,
   now: Date = new Date(),
+  options: AccountDeletionOptions = {},
 ): Promise<AccountDeletionResult> {
   const owned = all<{ id: string; public_id: string; state: string }>(
     db,
@@ -269,9 +309,27 @@ export async function deleteAccount(
 
   for (const report of owned) {
     if (report.state === "published") {
-      // Closes every public route immediately and queues its files.
-      await withdrawReport(db, actor, report.public_id, {}, now);
+      // Count the public derivative and evidence files that withdrawal will
+      // enqueue, then end withdrawal's "keep the private originals" exception.
+      const queuedByWithdrawal =
+        one<{ count: number }>(
+          db,
+          `SELECT
+             (SELECT COUNT(*) FROM report_media
+               WHERE report_id = ? AND role = 'public') +
+             (SELECT COUNT(*) FROM evidence WHERE report_id = ?) AS count`,
+          [report.id, report.id],
+        )?.count ?? 0;
+      await withdrawReport(
+        db,
+        actor,
+        report.public_id,
+        { removeFile: options.removeFile },
+        now,
+      );
       reportsWithdrawn += 1;
+      filesQueued += queuedByWithdrawal;
+      filesQueued += queueOwnedPrivateMedia(db, report.id, now);
       continue;
     }
 
@@ -327,7 +385,7 @@ export async function deleteAccount(
 
   anonymizeUser(db, actor.id, now);
 
-  await processMediaCleanup(db);
+  await processMediaCleanup(db, { removeFile: options.removeFile });
   const queued = one<{ count: number }>(
     db,
     "SELECT COUNT(*) AS count FROM media_cleanup WHERE completed_at IS NULL",

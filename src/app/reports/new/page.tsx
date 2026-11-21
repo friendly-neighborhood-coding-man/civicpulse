@@ -40,7 +40,7 @@ export default async function NewReportPage() {
             categories={REPORT_CATEGORIES}
           />
         ) : (
-          <DemoSignInCard heading="제보를 만들려면 데모 사용자를 선택하세요" />
+          <DemoSignInCard heading="제보를 만들려면 로그인하세요" />
         )}
       </div>
     </div>

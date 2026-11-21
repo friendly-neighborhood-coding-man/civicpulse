@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getAuthMode } from "@/lib/auth/mode";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/connection";
-import { listUsers } from "@/lib/domain/users";
+import { listDemoUsers } from "@/lib/domain/users";
 
 import AuthMenu from "./AuthMenu";
 import IdentitySwitcher from "./IdentitySwitcher";
@@ -13,7 +13,7 @@ export default async function SiteHeader() {
   const currentUser = await getSessionUser(db);
   const mode = getAuthMode();
   // Only the demo provider needs the synthetic user list.
-  const users = mode === "demo" ? listUsers(db) : [];
+  const users = mode === "demo" ? listDemoUsers(db) : [];
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/85 backdrop-blur">

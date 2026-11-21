@@ -1,14 +1,15 @@
 # CivicPulse — handoff
 
-Latest verified head: `stack/10-identity-and-retention` (`git log -1` on the branch;
-the feature commit precedes the docs commit containing this file). Baseline was
-`stack/06-delivery` at `280b590`; `c1a9782` is its parent, not a divergent head.
+Latest verified head: `stack/11-auth-privacy-corrections` at the commit containing
+this file (`git log -1`). Previous head: `stack/10-identity-and-retention` at
+`27dcf10`.
 
-Date: 2026-11-19. Repository: <https://github.com/friendly-neighborhood-coding-man/civicpulse>.
+Date: 2026-11-20. Repository:
+<https://github.com/friendly-neighborhood-coding-man/civicpulse>.
 All work is synthetic: no real report was submitted, no email/SMS sent, no government
-contact fabricated, nothing deployed, no repository setting changed.
+contact fabricated, nothing deployed, no repository setting changed, no paid API used.
 
-## Stack (all branches pushed; **no Pull Request exists yet**)
+## Stack (all branches pushed; Draft PRs #2–#11 exist)
 
 | Stage | Branch | Base | Head |
 |---|---|---|---|
@@ -21,107 +22,111 @@ contact fabricated, nothing deployed, no repository setting changed.
 | 07 Security hardening | `stack/07-security-hardening` | `stack/06-delivery` | `b380411` |
 | 08 Takedown & follow-up | `stack/08-takedown-and-followup` | `stack/07-security-hardening` | `aed422f` |
 | 09 Review corrections | `stack/09-review-corrections` | `stack/08-takedown-and-followup` | `f182b38` |
-| 10 Identity & retention | `stack/10-identity-and-retention` | `stack/09-review-corrections` | `git log -1` |
+| 10 Identity & retention | `stack/10-identity-and-retention` | `stack/09-review-corrections` | `27dcf10` |
+| 11 Auth privacy corrections | `stack/11-auth-privacy-corrections` | `stack/10-identity-and-retention` | `git log -1` |
 
-**Why no Draft PRs:** this sandbox has no authenticated GitHub CLI or token
-(`gh auth status` → not logged in; no `GITHUB_*`/`GH_TOKEN`). Branch pushes work
-through the managed git remote only. Body files are ready:
+**PR creation:** PRs #2–#11 are Draft and unmerged. This sandbox's GitHub CLI is
+unauthenticated (`gh auth status` → not logged in), so the stage-11 branch was pushed
+without opening its Draft PR. The body is ready:
 
 ```bash
-gh pr create --draft --base main                       --head stack/01-foundation        --title "01 · Foundation"              --body-file docs/pr/01-foundation.md
-gh pr create --draft --base stack/01-foundation        --head stack/02-report-creation   --title "02 · Report Creation"         --body-file docs/pr/02-report-creation.md
-gh pr create --draft --base stack/02-report-creation   --head stack/03-privacy           --title "03 · Privacy Protection"      --body-file docs/pr/03-privacy.md
-gh pr create --draft --base stack/03-privacy           --head stack/04-community         --title "04 · Community & Tracking"    --body-file docs/pr/04-community.md
-gh pr create --draft --base stack/04-community         --head stack/05-followup          --title "05 · Follow-up Workflow"      --body-file docs/pr/05-followup.md
-gh pr create --draft --base stack/05-followup          --head stack/06-delivery          --title "06 · Demo & Toss Readiness"   --body-file docs/pr/06-delivery.md
-gh pr create --draft --base stack/06-delivery          --head stack/07-security-hardening --title "07 · Security Hardening"     --body-file docs/pr/07-security-hardening.md
+gh pr create --draft \
+  --base stack/10-identity-and-retention \
+  --head stack/11-auth-privacy-corrections \
+  --title "11 · Auth Privacy Corrections" \
+  --body-file docs/pr/11-auth-privacy-corrections.md
+```
+
+The earlier commands (if a PR is ever missing):
+
+```bash
+gh pr create --draft --base main --head stack/01-foundation --title "01 · Foundation" --body-file docs/pr/01-foundation.md
+gh pr create --draft --base stack/01-foundation --head stack/02-report-creation --title "02 · Report Creation" --body-file docs/pr/02-report-creation.md
+gh pr create --draft --base stack/02-report-creation --head stack/03-privacy --title "03 · Privacy Protection" --body-file docs/pr/03-privacy.md
+gh pr create --draft --base stack/03-privacy --head stack/04-community --title "04 · Community & Tracking" --body-file docs/pr/04-community.md
+gh pr create --draft --base stack/04-community --head stack/05-followup --title "05 · Follow-up Workflow" --body-file docs/pr/05-followup.md
+gh pr create --draft --base stack/05-followup --head stack/06-delivery --title "06 · Demo & Toss Readiness" --body-file docs/pr/06-delivery.md
+gh pr create --draft --base stack/06-delivery --head stack/07-security-hardening --title "07 · Security Hardening" --body-file docs/pr/07-security-hardening.md
 gh pr create --draft --base stack/07-security-hardening --head stack/08-takedown-and-followup --title "08 · Takedown & Follow-up" --body-file docs/pr/08-takedown-and-followup.md
 gh pr create --draft --base stack/08-takedown-and-followup --head stack/09-review-corrections --title "09 · Review Corrections" --body-file docs/pr/09-review-corrections.md
 gh pr create --draft --base stack/09-review-corrections --head stack/10-identity-and-retention --title "10 · Identity & Retention" --body-file docs/pr/10-identity-and-retention.md
 ```
 
-## What the mission corrected (stages 07–08)
+## What stage 11 corrects (PR #11 review)
 
-- **Public text privacy (P0-A).** Publication now requires reading the exact public
-  title/body and acknowledges a server-issued token bound to that content, plus an
-  explicit decision when the heuristic scanner reports candidates. The audit stores
-  counts/kinds only. Evidence notes are scanned too.
-- **Status provenance (P0-B).** Any HTTPS URL no longer becomes "공식 확인". Only a
-  host in the curated official-portal registry can back `official_source`; other links
-  become `moderator_claim` (미검증). Only `official_source` drives the public official
-  status, feed chip, follow-up resolution rule and draft's official section.
-- **Evidence lifecycle hole.** Approved evidence photos now require the parent report
-  to still be published.
-- **Concurrency.** Evidence review checks the SQL change count, so one decision wins.
-- **Support in follow-ups (P1-A).** Drafts snapshot the accurate, duplicate-proof
-  support count, state that it is interest rather than truth, and never use it for
-  eligibility.
-- **Evidence chronology (P1-B).** "New evidence" uses approval time against the
-  previous follow-up's review time, so late approval counts.
-- **Withdrawal/retention (P1-C).** Owner withdrawal and moderator takedown remove the
-  public page, public photo and evidence photos immediately (transaction, then files),
-  keep the audit record, and are idempotent.
+1. **Account enumeration.** At `27dcf10`, unauthenticated `GET /api/session` returned
+   every live account (ids, handles, display names, roles) and `demo: true`, and the
+   home page server-rendered the same directory. The route now returns `users: []` in
+   password mode, only the acting user's safe projection when signed in, and exactly
+   the synthetic `DEMO_USERS` in demo mode. `listUsers` was removed; the header, home
+   page and signed-out cards are mode-aware; `/api/health` reports
+   `authMode` and derives `demoMode`. Reproduced at `27dcf10` with two provisioned
+   accounts on a temporary server: both were disclosed, including the moderator role.
+2. **Logout correctness.** `DELETE /api/session` is no longer rate limited (a 429 must
+   not hold a session the person ended). `AuthMenu` requires 2xx + `ok:true` before
+   navigating, shows 429/500/network errors, and keeps the session on failure. Success
+   expires `cp_session`; the password browser suite verifies `user: null` afterwards.
+3. **Account deletion media.** Published reports are withdrawn, then the private
+   `original` and `working` copies are queued immediately (not after 90 days) and their
+   media rows removed. Failures remain in `media_cleanup` with attempts/error and are
+   retried by the existing reconciliation paths. The removed report row is the
+   documented retention exception. See `docs/ACCOUNT_DELETION.md`.
 
-Stage 10 adds an optional password identity provider (demo remains the default), owner
-account export/deletion, a retention purge with a cron entry point, and the deployment
-and Toss decision records. Toss login/payments remain blocked, not simulated.
-
-Stage 09 addresses the independent review on PRs #8/#9: portal-domain checks are no
-longer presented as case verification, follow-ups use only the latest official status
-and require an explicit acknowledgement of a resolution claim, failed post-withdrawal
-deletions are durably queued and retried, and the text token is documented and exposed
-as an unsigned fingerprint. See `docs/REVIEW_CORRECTIONS.md`.
-
-See `docs/ACCEPTANCE_REVIEW.md` for the original defect table, reproductions and
-resolved/open findings.
-
-## Checks actually run (stage 08 head)
+## Checks actually run (stage 11 head)
 
 | Check | Result |
 |---|---|
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS (0 errors/warnings) |
-| `npm test` (Vitest) | PASS — 137 tests / 24 files |
+| `npm test` (Vitest) | PASS — 149 tests / 26 files |
 | `npm run build` | PASS — production build |
-| `npm run e2e` (Playwright, Chromium, `next start`, fresh `.local/e2e`) | PASS — 17 tests |
-| Visual review | privacy text panel (1280px and 390px), public provenance panel, withdrawn owner page |
+| `npm run e2e` (Chromium, `next start`, demo, fresh `.local/e2e`) | PASS — 17 tests |
+| `npm run e2e:password` (Chromium, `next start`, password, fresh `.local/e2e-password`) | PASS — 3 tests |
+| Base reproduction (`27dcf10`, temporary worktree/server) | Both password accounts and `demo: true` disclosed |
+| Base regression run (new deletion/retention tests at `27dcf10`) | 3 failures: 0 files queued, 2 private files retained |
 
-The Chromium run executed: honest home/health; identity switch/sign-out; foreign
+The demo Chromium run executes: honest home/health; identity switch/sign-out; foreign
 origin rejection; create → edit → reload; invalid upload/fields; signed-out draft 404;
-mask → preview → publish → anonymous public read; text-review gate incl. synthetic
-phone and stale token; publish without consent/masks refused; cross-user publish 404;
-support idempotency; pending evidence 404 → approval → public evidence; citizen blocked
-from moderation and official statuses; unrelated HTTPS rejected as official source;
-moderator claim accepted but not official; follow-up draft → approval persisted with no
-submission; ineligible reasons; owner withdrawal → public page/photo/evidence 404 and
-feed entry removed.
+mask → preview → publish → anonymous public read; text-review gate; publish without
+consent/masks refused; cross-user publish 404; support idempotency; pending evidence →
+approval → public evidence; citizen blocked from moderation; unrelated HTTPS rejected
+as official; follow-up draft → approval with no submission; owner withdrawal removes
+page/photo/evidence/feed.
+
+The password Chromium run executes: unauthenticated session/home expose no other
+account or role and health says password mode; login exposes only self; success clears
+the cookie; 35 sign-outs never return 429; mocked 500 and aborted network keep the
+session and show an error.
+
+New tests: `tests/auth-privacy.test.ts` (4), `tests/signout.test.ts` (5), account
+deletion media roles + failed cleanup/retry (+2), retention-after-account-deletion
+(+1), `e2e-password/auth-privacy.spec.ts` (3).
 
 ## Mocked vs real
 
 | Thing | Status |
 |---|---|
 | Draft/follow-up text | **Mock/deterministic** template (`CIVICPULSE_AI_MODE=mock`); no model call |
-| Identity | **Mock** seeded users + signed demo cookie; labelled 모의 로그인 |
+| Demo identity | **Mock** seeded users + signed cookie; labelled not authentication |
+| Password identity | **Real local** scrypt accounts provisioned by `npm run user:create`; no registration/reset/MFA |
 | Official channels | **Verified registry** (안전신문고, 국민신문고) with source URL + `asOf 2026-11-19` |
 | Official status | **Moderator-entered**, domain-checked; **no government API**, no automatic confirmation |
-| Text privacy scan | **Heuristic** patterns; misses likely; human review required |
-| Face/plate detection | **Not real**; manual masking is the path (browser `FaceDetector` unavailable → NOT_RUN) |
-| Evidence redaction | **Manual** uploader confirmation + moderator review |
-| Withdrawal | **Visibility control**, not guaranteed erasure everywhere |
+| Face/plate detection | **Not real**; manual masking is the path |
+| Withdrawal/deletion | Visibility + app-stored file deletion; backups/caches/third parties out of reach |
 | Submission | **Does not exist** by design |
-| Toss SDK / payments / email / SMS / analytics | None; docs only |
+| Toss SDK / payments / email / SMS / analytics | None; `docs/TOSS.md` records Toss as BLOCKED |
 
-## Unresolved risks (unchanged or newly documented)
+## Unresolved risks
 
 - Node-only stack (`sharp`, `node:sqlite`) → no edge/Workers deployment as-is.
-- Demo authentication; no account deletion, export, or real identity.
-- In-memory rate limiting resets on restart; single-node SQLite; local media disk.
-- Withdrawal cannot reach backups, third-party caches, search engines or screenshots;
-  no scheduled purge or legal hold.
-- Removed reports retain private originals, masks, timeline and text audit.
-- Heuristic text scan has false negatives/positives; only human review is a control.
+- Password accounts have no registration, reset, MFA or selective session revocation.
+  Logout expires this browser's cookie; a copied 30-day token stays valid.
+- Removed report rows (text, masks, timeline) and other users' evidence rows on a
+  withdrawn report remain until the external retention job. Without cron they remain.
+- Completed `media_cleanup` rows keep storage keys indefinitely (no content).
+- Media cleanup failures are observable by count/log but not alerted.
 - Official provenance verifies a domain, not the cited page's content.
-- No published-text revision flow, no pagination, no notifications.
+- No published-text revision flow, notifications, pagination or durable rate limiting.
 
 ## Cost
 
@@ -130,12 +135,13 @@ assumptions, not measurements.
 
 ## Recommended next actions
 
-1. Create the eight Draft PRs with the commands above and review in stack order.
-2. Read `docs/REVIEW_CORRECTIONS.md`; decide whether the remaining risks are acceptable
-   for a demo.
-3. Choose Node hosting with a persistent volume and `CIVICPULSE_AUTH_MODE=password` for a
-   pilot; configure `npm run retention` in cron and check `/api/health` for pending
-   cleanup/retention counts.
-4. Add a scheduled media/retention purge and a published-text revision flow.
-5. Only then start Toss integration per `docs/TOSS_READINESS.md`, re-verifying every
-   policy URL at that time.
+1. Open the stage-11 Draft PR with the command above, then review #2–#11 in stack order.
+2. For a pilot: Node hosting with a persistent volume, `CIVICPULSE_AUTH_MODE=password`,
+   a TLS proxy, `npm run retention` in cron, and monitoring of `/api/health`
+   (`mediaCleanupPending`, `retentionEligible`, `authMode`).
+3. Next packages (not started): `stack/12-published-revisions` (published text/photo are
+   immutable today; add revision rows, re-review and visible history) and
+   `stack/13-operations` (package retention/cleanup as a systemd timer or cron file,
+   durable SQLite rate limiting, alerting on pending cleanup).
+4. Toss integration remains blocked on app registration and credentials; do not start it
+   before the pilot gaps above are closed.

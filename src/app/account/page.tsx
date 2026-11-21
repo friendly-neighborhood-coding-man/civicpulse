@@ -48,8 +48,9 @@ export default async function AccountPage() {
         </div>
 
         <p className="mt-6 text-[11px] leading-relaxed text-muted">
-          계정 삭제는 되돌릴 수 없습니다. 공개 제보는 먼저 공개 중단되며, 남은
-          파일은 삭제 대기열을 통해 지워집니다.{" "}
+          계정 삭제는 되돌릴 수 없습니다. 공개 제보는 먼저 공개 중단되고 사진·근거
+          파일은 즉시 삭제 대기열로 들어가며, 실패하면 재시도됩니다. 공개 중단된
+          기록은 보존 기간 뒤 삭제됩니다.{" "}
           <Link href="/reports" className="underline underline-offset-2">
             내 제보 보기
           </Link>

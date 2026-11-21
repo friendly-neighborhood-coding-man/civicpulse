@@ -90,6 +90,17 @@ was touched.
 - Demo accounts can be deleted in demo mode, which breaks that switcher entry until a
   database reset.
 
+## Errata (stage 11)
+
+Independent review of this PR found three defects that stage 10 did not catch:
+password mode exposed every account (id, handle, name, role) from `GET /api/session`
+and the home/signed-out pages while reporting `demo: true`; the sign-out button
+ignored 429/500/network failures; and account deletion retained private originals of
+published reports despite UI copy that implied all photos were deleted. They are
+fixed, with regression tests and a base-commit reproduction, in
+`stack/11-auth-privacy-corrections` — see `docs/pr/11-auth-privacy-corrections.md` and
+`docs/ACCOUNT_DELETION.md`.
+
 ## Not implemented
 
 No deployment, no object storage, no queue, no OIDC/Toss provider, no email delivery,

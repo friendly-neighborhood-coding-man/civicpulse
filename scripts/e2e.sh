@@ -40,4 +40,9 @@ cat > "$CONF" <<EOF
 EOF
 export FONTCONFIG_FILE="$CONF"
 
-exec npx playwright test "$@"
+ARGS=()
+if [ -n "${PLAYWRIGHT_CONFIG:-}" ]; then
+  ARGS+=(--config "$PLAYWRIGHT_CONFIG")
+fi
+
+exec npx playwright test "${ARGS[@]}" "$@"

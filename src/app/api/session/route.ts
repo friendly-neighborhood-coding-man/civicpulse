@@ -9,7 +9,7 @@ import { isDemoAuthMode } from "@/lib/auth/mode";
 import { getSessionSwitchLimit } from "@/lib/config";
 import { getDb } from "@/lib/db/connection";
 import { DEMO_USERS } from "@/lib/db/seed";
-import { listUsers } from "@/lib/domain/users";
+import { buildSessionView } from "@/lib/domain/session-view";
 import { assertSameOrigin, jsonOk, readJson, withApi } from "@/lib/http/api";
 import { ApiError } from "@/lib/http/errors";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
@@ -22,7 +22,10 @@ export async function GET() {
   return withApi(async () => {
     const db = getDb();
     const user = await getSessionUser(db);
-    return jsonOk({ user, users: listUsers(db), demo: true });
+    // Password mode must not reveal that any other account exists: no ids,
+    // names, handles or roles. Demo mode exposes only its fixed synthetic
+    // identities, never provisioned password accounts.
+    return jsonOk(buildSessionView(db, user));
   });
 }
 
@@ -55,7 +58,10 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   return withApi(async () => {
     assertSameOrigin(request);
-    enforceRateLimit("session:signout", { limit: 30, windowMs: 60_000 });
+    // Signing out is a user safety operation, not abuse: refusing it with a 429
+    // would keep a session the person explicitly asked to end. It is idempotent
+    // and only expires the caller's own cookie, so it is intentionally not rate
+    // limited.
     await clearSessionUser();
     return jsonOk({ user: null });
   });

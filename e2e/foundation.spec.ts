@@ -19,6 +19,7 @@ test.describe("foundation", () => {
     const body = await health.json();
     expect(body.ok).toBe(true);
     expect(body.data.demoMode).toBe(true);
+    expect(body.data.authMode).toBe("demo");
     expect(body.data.assistantMode).toBe("mock");
     expect(body.data.schemaVersion).toBeGreaterThanOrEqual(1);
     expect(Object.keys(body.data)).not.toContain("secret");
