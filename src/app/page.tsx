@@ -26,16 +26,19 @@ const STEPS = [
   {
     step: "03",
     title: "추적과 후속",
-    body: "공개된 기록에 지지를 표시하고, 검토를 거친 추가 근거와 출처가 붙은 공식 상태를 쌓습니다. 대기 기간과 새 근거가 충분하면 사람이 검토하는 후속 요청 초안을 만듭니다.",
+    body: "공개된 기록에 지지를 표시하고, 검토를 거친 추가 근거와, 운영자가 공식 포털 주소를 인용해 입력한 상태를 쌓습니다(해당 사건 내용은 확인하지 않음). 대기 기간과 새 근거가 충분하면 사람이 검토하는 후속 요청 초안을 만듭니다.",
     status: "사용 가능",
   },
 ];
 
 const TRUST_LEVELS = [
   {
-    label: "공식 확인",
+    label: "공식 포털 인용 · 운영자 입력",
     tone: "bg-accent-soft text-accent-strong border-accent/25",
-    body: "공공기관의 답변이나 공개 자료에 근거한 상태. 출처와 확인 시점을 함께 표시합니다.",
+    // Matches what the code verifies: a registered portal hostname plus a
+    // moderator assertion. The cited case, page content or outcome is not
+    // authenticated, so the card must not promise more (PR #12 review).
+    body: "운영자가 등록된 공식 포털 주소를 인용해 입력한 상태입니다. 포털 도메인만 확인하며, 인용한 사건의 접수·처리·해결 내용은 확인하지 않았습니다.",
   },
   {
     label: "시민 주장",
@@ -265,6 +268,7 @@ export default async function HomePage() {
       </section>
 
       <section
+        id="trust"
         className="container-page border-t border-line py-14"
         aria-labelledby="trust-heading"
       >

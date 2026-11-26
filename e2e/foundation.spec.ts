@@ -14,6 +14,15 @@ test.describe("foundation", () => {
     await expect(page.getByText("실제 신고 전송 없음")).toBeVisible();
     await expect(page.getByText("이 프로토타입이 하지 않는 일")).toBeVisible();
 
+    // The trust card must describe what is actually verified: a portal domain
+    // cited by an operator, not the case itself (PR #12 review).
+    const trust = page.locator("#trust");
+    await expect(trust.getByText("공식 포털 인용 · 운영자 입력")).toBeVisible();
+    await expect(trust).toContainText("인용한 사건의 접수·처리·해결 내용은 확인하지 않았습니다");
+    await expect(trust.getByText("공식 확인", { exact: true })).toHaveCount(0);
+    await expect(page.locator("main")).not.toContainText("공공기관의 답변이나 공개 자료에 근거한 상태");
+    await expect(page.locator("main")).not.toContainText("출처가 붙은 공식 상태");
+
     const health = await request.get("/api/health");
     expect(health.status()).toBe(200);
     const body = await health.json();
