@@ -172,6 +172,27 @@ describe("analysis guardrails", () => {
     expect(outcome.report.rules).toContain("address");
   });
 
+  it("drops a licence plate and rejects unsupported certainty in the draft", () => {
+    const plate = applyGuardrails(
+      withResult({ observations: ["차량 12가 3456이 통행을 막고 있습니다."] }),
+      USER_TEXT,
+    );
+    expect(plate.ok).toBe(true);
+    if (!plate.ok) return;
+    expect(plate.result.observations).toEqual([]);
+    expect(plate.report.rules).toContain("plate");
+
+    const certain = applyGuardrails(
+      withResult({
+        draft: { ...VALID_RESULT.draft, concern: "확실히 위험합니다." },
+      }),
+      USER_TEXT,
+    );
+    expect(certain.ok).toBe(false);
+    if (certain.ok) return;
+    expect(certain.report.rules).toContain("certainty");
+  });
+
   it("never mentions the offending values in the report", () => {
     const outcome = applyGuardrails(
       withResult({ observations: ["02-9876-5432 또는 https://evil.example"] }),

@@ -251,10 +251,11 @@ function fallbackResult(report: ReportRow, code: FailureCode): AnalysisResult {
     observations: [],
     interpretations: [],
     safetyConcerns: [],
+    // The failure reason is shown once, in the fallback notice. Repeating it in
+    // this list would read as two separate problems.
     uncertainties: [
-      FAILURE_LABEL[code],
       "사진에서 확인된 내용은 정리되지 않았습니다. 초안은 시민이 쓴 설명만으로 만들었습니다.",
-    ].slice(0, ANALYSIS_LIMITS.maxUncertainties),
+    ],
     missingEvidence: assistant.missingEvidence
       .slice(0, ANALYSIS_LIMITS.maxMissingEvidence)
       .map((item) => item.slice(0, ANALYSIS_LIMITS.maxItemLength)),

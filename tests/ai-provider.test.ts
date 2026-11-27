@@ -206,6 +206,22 @@ describe("OpenAI adapter", () => {
     }
   });
 
+  it("maps a transport failure to network, and an aborted transfer to timeout", async () => {
+    const network = await provider(async () => {
+      throw new Error("ECONNRESET");
+    })
+      .analyze(REQUEST, AbortSignal.timeout(1_000))
+      .catch((caught: unknown) => caught);
+    expect((network as ProviderError).code).toBe("network");
+
+    const timeout = await provider(async () => {
+      throw new Error("socket hang up");
+    })
+      .analyze(REQUEST, AbortSignal.abort())
+      .catch((caught: unknown) => caught);
+    expect((timeout as ProviderError).code).toBe("timeout");
+  });
+
   it("reports a timeout when the caller's signal has aborted", async () => {
     const error = await provider(async () => {
       throw new Error("socket hang up");
