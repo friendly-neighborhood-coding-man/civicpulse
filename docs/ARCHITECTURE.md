@@ -358,3 +358,70 @@ labels say **공식 포털 인용** rather than "공식 확인".
   retention window, plus an anonymised tombstone and completed media-queue keys; it
   cannot reach backups or external caches.
 - No public pagination, no edit/revision flow for published text, no notification.
+
+## Multimodal assistant (stages 12–14)
+
+One citizen-initiated request produces one structured result:
+
+```
+POST /api/reports (unchanged, deterministic draft)
+  -> POST /api/reports/{publicId}/analysis
+       consent (only for an external provider) -> durable limits -> cache
+       -> working copy -> 512px metadata-free JPEG -> one provider call
+       -> strict schema -> guardrails -> report_analyses row
+  -> POST /api/reports/{publicId}/analysis/apply
+       explicit copy into title/description, with an overwrite guard
+```
+
+- **Contract:** `src/lib/ai/schema.ts`, version `civicpulse.analysis.v1`. Observations,
+  interpretations, safety concerns, uncertainties, missing evidence, privacy warnings,
+  next steps, one optional question, four draft fields.
+- **Providers:** `src/lib/ai/providers/`. Simulation is the default and never leaves the
+  process. The OpenAI Responses adapter sends one text part and one image part with
+  `store: false`, Structured Outputs and bounded output. Live mode without a key is an
+  explicit fallback, not a silent simulation.
+- **Guardrails:** deterministic rules drop offending list items and reject a whole draft
+  that contains a URL, contact, plate, address, named agency, legal claim, government
+  action, invented measurement/incident/prior report, or unsupported certainty.
+- **Storage:** `report_analyses` keeps the result, provenance (`live`/`mock`/`fallback`,
+  provider, model, external transfer, simulated observations), failure code, guardrail
+  counts, tokens and latency. `reports.applied_analysis_id` records which analysis wrote
+  the current body. No key, prompt, image or provider error body is stored.
+- **Limits:** one image per call, 512px, bounded output tokens, 25 s timeout, no automatic
+  retries, identical-input reuse, per-report attempts, per-user and global rolling-24h
+  live budgets. `npm run ai:usage` prints aggregates only.
+- **UI:** `NewReportForm` (two actions, disclosure, consent) and `AnalysisPanel`
+  (provenance, sections, apply, optional clarification, retry). The deterministic path
+  remains available and is covered by the existing browser specs.
+
+## Verification status (stage 14)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | PASS |
+| `npm run lint` | PASS |
+| `npm test` | PASS — 208 tests / 31 files |
+| `npm run build` | PASS |
+| `npm run e2e` | PASS — 21 Chromium tests (19 desktop + 2 phone-sized AI) |
+| `npm run e2e:password` | PASS — 4 password-mode Chromium tests |
+| `npm run e2e:fallback` | PASS — live mode without a key shows an explicit fallback |
+| `npm run e2e:demo` | PASS — synthetic screenshots in `docs/screenshots/` |
+| Live provider | **NOT VERIFIED** — `LIVE_MODEL_NOT_VERIFIED`, no key/budget |
+
+## Known limitations (stage 14)
+
+- Guardrails are Korean-centric patterns, not a truth classifier; novel phrasing can
+  pass, and the rules can false-positive. Every AI sentence remains editable and labelled.
+- No image PII detector, OCR or moderation endpoint. Human redaction is the control, and
+  the absence of an AI privacy warning is not proof of safety.
+- Provider retention, training and residency are unknown; `store: false` is not a
+  zero-retention guarantee. No such claim is made in the UI.
+- The default model (`gpt-5-mini`) is marked deprecated on its official page; operators
+  must choose a current model. No live call has been verified.
+- Simulation analyses the pixels of nothing: observations exist only for the three
+  shipped synthetic samples, matched by SHA-256.
+- The fallback draft is the deterministic template; it is not an analysis and cannot be
+  applied from the panel.
+- Rate limiting is per process in front of SQL daily limits; no distributed limiter.
+- Chromium only. Cost figures are estimates from configured list prices, not measured
+  spend.

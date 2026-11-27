@@ -36,5 +36,16 @@ export default defineConfig({
       CIVICPULSE_SESSION_SWITCH_LIMIT: "200",
     },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    // The AI panel is the part a citizen will use on a phone. Running its spec
+    // at a phone viewport catches overflow and unreachable controls without
+    // doubling every desktop spec. Pixel 5 is a Chromium descriptor; the iPhone
+    // descriptors default to WebKit, which this suite does not install.
+    {
+      name: "mobile-chromium",
+      use: { ...devices["Pixel 5"] },
+      testMatch: /(ai-assist)\.spec\.ts/,
+    },
+  ],
 });

@@ -60,10 +60,34 @@ Do not vendor a guessed SDK name, and do not bypass iframe restrictions.
 - [ ] Review the service open policy and app review requirements with a human.
 - [ ] Re-verify every URL above at integration time; policy and SDK versions change.
 
+## AI analysis in a Toss frontend
+
+The assistant endpoints are ordinary same-origin, cookie-authenticated JSON APIs
+(`POST /api/reports/{publicId}/analysis` and `.../analysis/apply`), so a Toss WebView
+can call them without a new SDK. Requirements for that frontend:
+
+- Serve the Node backend over **HTTPS**; `sharp` and `node:sqlite` cannot run inside a
+  static WebView bundle.
+- Authenticate with a server-verified Toss identity/session. Never trust a
+  client-provided user id; the backend derives the owner from the session.
+- Upload the photo as `multipart/form-data` through the existing report endpoint, then
+  call analysis separately. Do not send precise coordinates or a landmark to analysis.
+- When live mode is enabled, show the external-transfer consent **before** the call; the
+  server re-checks it and returns 400 without it. Always offer the no-AI path.
+- Preserve the provenance labels (`실제 AI 분석`, `시뮬레이션 · 모델 미호출`,
+  `AI 사용 불가 · 대체 초안`). A mini-app must not relabel a simulation as AI.
+- Keep navigation to the verified official channel user-initiated; no Toss SDK call is
+  assumed, and no submission happens automatically.
+- Re-check the provider's retention/training terms for the regions Toss serves; the app
+  makes no zero-retention or residency claim.
+
 ## Cost notes (unverified)
 
 The application makes no paid API calls and has no external integration today, so the
 measured operating cost of this repository is **KRW 0** beyond the machine it runs on.
+The AI path is simulation-only by default; a live pilot is estimated at roughly
+**$0.0016 per analysis** (about 2 KRW at 1 400 KRW/USD) from the configured list prices.
+That is an estimate, not measured spend, and no live call has been made.
 A production deployment (managed Postgres/SQLite storage, image processing CPU, object
 storage) has **not** been measured. The target of under KRW 50,000/month remains an
 assumption to validate with real usage data, not a result.
