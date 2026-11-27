@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import DemoSignInCard from "@/components/DemoSignInCard";
 import NewReportForm from "@/components/NewReportForm";
+import { describeAiConfig } from "@/lib/ai/config";
 import { getSessionUser } from "@/lib/auth/session";
 import { DEMO_AREAS, REPORT_CATEGORIES } from "@/lib/domain/areas";
 
@@ -38,6 +39,7 @@ export default async function NewReportPage() {
           <NewReportForm
             areas={DEMO_AREAS.map((area) => ({ id: area.id, label: area.label }))}
             categories={REPORT_CATEGORIES}
+            ai={describeAiConfig()}
           />
         ) : (
           <DemoSignInCard heading="제보를 만들려면 로그인하세요" />

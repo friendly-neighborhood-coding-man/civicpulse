@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
+import type { AiConfigSummary } from "@/lib/ai/config";
 import type { ReportCategoryId } from "@/lib/domain/areas";
 
 type AreaOption = { id: string; label: string };
@@ -18,9 +19,11 @@ const SAMPLES: Sample[] = [
 type Props = {
   areas: AreaOption[];
   categories: ReadonlyArray<{ id: ReportCategoryId; label: string; description: string }>;
+  /** Safe provider summary; never contains a key. */
+  ai: AiConfigSummary;
 };
 
-export default function NewReportForm({ areas, categories }: Props) {
+export default function NewReportForm({ areas, categories, ai }: Props) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -32,7 +35,8 @@ export default function NewReportForm({ areas, categories }: Props) {
   const [landmark, setLandmark] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy] = useState<null | "draft" | "ai">(null);
+  const [liveConsent, setLiveConsent] = useState(false);
 
   function adoptFile(next: File, sourceSampleId: string | null) {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -57,16 +61,16 @@ export default function NewReportForm({ areas, categories }: Props) {
     }
   }
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  /** Create the private draft. AI is never part of this step. */
+  async function createDraft(): Promise<{ publicId: string } | null> {
     setError(null);
     if (!file) {
       setError("사진을 첨부해 주세요.");
-      return;
+      return null;
     }
     if (description.trim().length < 10) {
       setError("설명은 10자 이상 입력해 주세요.");
-      return;
+      return null;
     }
 
     const form = new FormData();
@@ -76,27 +80,68 @@ export default function NewReportForm({ areas, categories }: Props) {
     form.set("areaId", areaId);
     form.set("landmark", landmark);
 
-    setSubmitting(true);
-    try {
-      const response = await fetch("/api/reports", { method: "POST", body: form });
-      const body = (await response.json().catch(() => null)) as
-        | {
-            ok: boolean;
-            data?: { report: { publicId: string } };
-            error?: { message?: string; details?: { issues?: Array<{ message: string }> } };
-          }
-        | null;
+    const response = await fetch("/api/reports", { method: "POST", body: form });
+    const body = (await response.json().catch(() => null)) as
+      | {
+          ok: boolean;
+          data?: { report: { publicId: string } };
+          error?: { message?: string; details?: { issues?: Array<{ message: string }> } };
+        }
+      | null;
 
-      if (!response.ok || !body?.ok || !body.data) {
-        const issue = body?.error?.details?.issues?.[0]?.message;
-        setError(issue ?? body?.error?.message ?? "초안을 만들지 못했습니다.");
-        return;
-      }
-      router.push(`/reports/${body.data.report.publicId}`);
+    if (!response.ok || !body?.ok || !body.data) {
+      const issue = body?.error?.details?.issues?.[0]?.message;
+      setError(issue ?? body?.error?.message ?? "초안을 만들지 못했습니다.");
+      return null;
+    }
+    return body.data.report;
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy("draft");
+    try {
+      const created = await createDraft();
+      if (created) router.push(`/reports/${created.publicId}`);
     } catch {
       setError("네트워크 오류로 초안을 만들지 못했습니다.");
     } finally {
-      setSubmitting(false);
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Create the draft first, then ask for one analysis. A failed analysis never
+   * costs the citizen the draft: they land on it with an explanation and can
+   * retry, edit, or publish without AI.
+   */
+  async function submitWithAi() {
+    if (ai.mode === "live" && !liveConsent) {
+      setError("사진과 설명을 외부 AI 서비스로 전송하려면 동의가 필요합니다.");
+      return;
+    }
+    setBusy("ai");
+    let created: { publicId: string } | null = null;
+    let analysed = false;
+    try {
+      created = await createDraft();
+      if (!created) return;
+      const response = await fetch(`/api/reports/${created.publicId}/analysis`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ consent: liveConsent, clarificationAnswer: null }),
+      });
+      const body = (await response.json().catch(() => null)) as { ok?: boolean } | null;
+      analysed = response.ok && body?.ok === true;
+    } catch {
+      // Navigate anyway when the draft exists; explain when it does not.
+      analysed = false;
+      if (!created) setError("네트워크 오류로 초안을 만들지 못했습니다.");
+    } finally {
+      setBusy(null);
+    }
+    if (created) {
+      router.push(`/reports/${created.publicId}${analysed ? "?ai=done" : "?ai=failed"}`);
     }
   }
 
@@ -255,8 +300,40 @@ export default function NewReportForm({ areas, categories }: Props) {
         </div>
 
         <div className="rounded-xl border border-line bg-surface-muted px-4 py-3 text-xs leading-relaxed text-ink-soft">
-          다음 단계에서 규칙 기반 보조 초안이 만들어집니다. 기관·연락처·처리
-          결과를 새로 만들지 않으며, 제출 전 직접 수정할 수 있습니다.
+          <p className="font-medium text-ink">
+            {ai.mode === "live"
+              ? "AI로 정리하기를 누르면 사진과 설명이 외부 AI 서비스로 전송됩니다."
+              : "지금은 시뮬레이션 모드이며 사진은 외부로 전송되지 않습니다."}
+          </p>
+          <p className="mt-1">
+            {ai.mode === "live"
+              ? `메타데이터를 제거하고 줄인 사진 사본만 ${ai.provider ?? "외부 AI 서비스"}${ai.model ? ` (${ai.model})` : ""}에 보냅니다. 원본 파일과 정확한 좌표는 보내지 않습니다.`
+              : "실제 언어 모델을 호출하지 않고 규칙 기반 초안을 만듭니다. 합성 샘플 사진에 한해 미리 작성된 관찰을 보여줍니다."}
+          </p>
+          <p className="mt-1">
+            AI는 참고용이며 법적 판단이 아닙니다. 결과는 저장 전에 직접
+            수정할 수 있고, 공개·접수는 별도 단계에서 본인이 결정합니다.
+          </p>
+          {ai.mode === "live" ? (
+            <label className="mt-2 flex items-start gap-2 text-[11px] text-ink-soft">
+              <input
+                type="checkbox"
+                checked={liveConsent}
+                onChange={(event) => setLiveConsent(event.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                사진과 설명을 외부 AI 서비스로 전송하는 것에 동의합니다. (선택)
+                동의하지 않으면 AI 없이 초안을 만들 수 있습니다.
+              </span>
+            </label>
+          ) : null}
+          {ai.mode === "live" && !ai.configured ? (
+            <p className="mt-2 text-[11px] text-danger">
+              서버에 AI API 키가 없어 실제 분석은 실행되지 않고 대체 초안이
+              만들어집니다.
+            </p>
+          ) : null}
         </div>
       </fieldset>
 
@@ -269,15 +346,27 @@ export default function NewReportForm({ areas, categories }: Props) {
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={submitting}
+          disabled={busy !== null}
+          className="inline-flex h-11 items-center rounded-full border border-line bg-surface px-5 text-sm font-semibold text-ink transition hover:border-line-strong disabled:opacity-60"
+        >
+          {busy === "draft" ? "초안 만드는 중…" : "비공개 초안 만들기"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void submitWithAi()}
+          disabled={busy !== null}
           className="inline-flex h-11 items-center rounded-full bg-accent px-6 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:opacity-60"
         >
-          {submitting ? "초안 만드는 중…" : "비공개 초안 만들기"}
+          {busy === "ai" ? "AI가 사진을 보고 정리하는 중…" : "AI로 제보 정리하기"}
         </button>
         <span className="text-xs text-muted">
-          공개되지 않습니다. 다음 단계에서 검토 후 결정합니다.
+          어느 쪽이든 비공개 초안으로 저장되며, 공개·접수는 별도로 직접
+          결정합니다.
         </span>
       </div>
+      <p className="text-[11px] leading-relaxed text-muted">
+        AI를 건너뛰어도 모든 기능을 그대로 사용할 수 있습니다.
+      </p>
     </form>
   );
 }

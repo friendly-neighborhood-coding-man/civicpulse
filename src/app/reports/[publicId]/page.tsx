@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import AnalysisPanel from "@/components/AnalysisPanel";
 import ChannelCard from "@/components/ChannelCard";
 import DemoSignInCard from "@/components/DemoSignInCard";
 import DraftEditor from "@/components/DraftEditor";
 import FollowupPanel from "@/components/FollowupPanel";
 import PrivacyPublishFlow from "@/components/PrivacyPublishFlow";
 import ReportWithdrawal from "@/components/ReportWithdrawal";
+import { describeAiConfig } from "@/lib/ai/config";
 import { getSessionUser } from "@/lib/auth/session";
 import { getDb } from "@/lib/db/connection";
+import { getAppliedAnalysis, getLatestAnalysis } from "@/lib/domain/analysis";
 import { getChannel, toPublicChannel } from "@/lib/domain/channels";
 import { categoryLabel } from "@/lib/domain/areas";
 import { getFollowupForOwner } from "@/lib/domain/followup";
@@ -19,7 +22,10 @@ import { ApiError } from "@/lib/http/errors";
 
 export const dynamic = "force-dynamic";
 
-type PageProps = { params: Promise<{ publicId: string }> };
+type PageProps = {
+  params: Promise<{ publicId: string }>;
+  searchParams: Promise<{ ai?: string | string[] }>;
+};
 
 function formatDateTime(iso: string): string {
   const date = new Date(iso);
@@ -31,8 +37,9 @@ function formatDateTime(iso: string): string {
   }).format(date);
 }
 
-export default async function ReportDraftPage({ params }: PageProps) {
+export default async function ReportDraftPage({ params, searchParams }: PageProps) {
   const { publicId } = await params;
+  const { ai: aiParam } = await searchParams;
   const user = await getSessionUser();
 
   if (!user) {
@@ -61,6 +68,14 @@ export default async function ReportDraftPage({ params }: PageProps) {
   const followup =
     report.state === "published"
       ? getFollowupForOwner(db, user, report.publicId)
+      : null;
+  // Only a draft can be analysed; published text is never rewritten here.
+  const analysis = report.state === "draft" ? getLatestAnalysis(db, user, report.publicId) : null;
+  const appliedAnalysis = getAppliedAnalysis(db, user, report.publicId);
+  const ai = describeAiConfig();
+  const aiNotice =
+    aiParam === "failed"
+      ? "AI 분석을 완료하지 못했습니다. 초안은 그대로 저장되어 있습니다. 아래에서 다시 시도하거나 직접 수정할 수 있습니다."
       : null;
 
   return (
@@ -160,6 +175,7 @@ export default async function ReportDraftPage({ params }: PageProps) {
                 </p>
                 <div className="mt-5">
                   <DraftEditor
+                    key={report.updatedAt}
                     publicId={report.publicId}
                     initialTitle={report.title}
                     initialDescription={report.description}
@@ -181,6 +197,15 @@ export default async function ReportDraftPage({ params }: PageProps) {
               </>
             )}
           </section>
+
+          {report.state === "draft" ? (
+            <AnalysisPanel
+              publicId={report.publicId}
+              initial={analysis}
+              ai={ai}
+              notice={aiNotice}
+            />
+          ) : null}
 
           {followup ? (
             <FollowupPanel publicId={report.publicId} initial={followup} />
@@ -215,17 +240,47 @@ export default async function ReportDraftPage({ params }: PageProps) {
           <section className="rounded-2xl border border-line bg-surface p-5">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-ink">이 초안의 출처</h2>
-              <span className="rounded-full border border-warn/30 bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn">
-                모의 · 규칙 기반
+              <span
+                className={
+                  appliedAnalysis?.provenance.mode === "live"
+                    ? "rounded-full border border-accent/30 bg-accent-soft px-2 py-1 text-[10px] font-semibold text-accent-strong"
+                    : "rounded-full border border-warn/30 bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn"
+                }
+              >
+                {appliedAnalysis?.provenance.mode === "live"
+                  ? "실제 AI · 적용됨"
+                  : appliedAnalysis?.status === "completed"
+                    ? "시뮬레이션 · 적용됨"
+                    : "모의 · 규칙 기반"}
               </span>
             </div>
-            <p className="mt-2 text-xs leading-relaxed text-ink-soft">
-              사람이 작성한 설명을 정해진 문장 틀로 정리했습니다. 언어 모델이나
-              외부 API를 호출하지 않았습니다.
-            </p>
+            {appliedAnalysis?.status === "completed" ? (
+              appliedAnalysis.provenance.mode === "live" ? (
+                <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+                  사진과 설명을 {appliedAnalysis.provenance.provider ?? "외부 AI 서비스"}
+                  {appliedAnalysis.provenance.model
+                    ? ` · ${appliedAnalysis.provenance.model}`
+                    : ""}
+                  에 보내 만든 AI 초안을 적용했습니다. 관찰 내용은 참고용이며 법적
+                  판단이나 공식 확인이 아닙니다.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+                  실제 언어 모델을 호출하지 않은 시뮬레이션 관찰과 초안을
+                  적용했습니다. 합성 샘플 사진에 대해 미리 작성된 내용이며, AI
+                  관찰은 참고용입니다.
+                </p>
+              )
+            ) : (
+              <p className="mt-2 text-xs leading-relaxed text-ink-soft">
+                사람이 작성한 설명을 정해진 문장 틀로 정리했습니다. 언어 모델이나
+                외부 API를 호출하지 않았습니다.
+              </p>
+            )}
             <p className="mt-2 text-[11px] text-muted">
-              생성 시각{" "}
-              {report.assistant ? formatDateTime(report.assistant.generatedAt) : "-"}
+              {appliedAnalysis
+                ? `적용 시각 ${formatDateTime(appliedAnalysis.appliedAt ?? appliedAnalysis.createdAt)}`
+                : `생성 시각 ${report.assistant ? formatDateTime(report.assistant.generatedAt) : "-"}`}
             </p>
           </section>
 

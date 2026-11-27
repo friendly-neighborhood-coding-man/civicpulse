@@ -58,7 +58,9 @@ export const OFFICIAL_CHANNELS: OfficialChannel[] = [
     url: "https://www.epeople.go.kr/",
     submissionMode: "web_portal",
     requiresAccount: true,
-    handles: ["other"],
+    // General civil complaints. Accessibility obstructions are routed here as a
+    // general request because no category-specific channel has been verified.
+    handles: ["other", "accessibility"],
     whatToExpect:
       "행정기관의 처분·제도로 인한 불편이나 특정 행위를 요구하는 일반 민원을 접수합니다. 접수 후 소관 기관이 지정되어 처리 결과를 통보합니다.",
     limitations:

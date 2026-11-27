@@ -8,6 +8,7 @@ export const REPORT_CATEGORIES = [
   { id: "waste", label: "쓰레기·폐기물", description: "무단 투기, 방치된 폐기물" },
   { id: "water", label: "누수·배수 문제", description: "도로 누수, 막힌 배수로" },
   { id: "signage", label: "불법 광고물", description: "불법 현수막, 부착 광고" },
+  { id: "accessibility", label: "보행 장애물·접근성", description: "통행을 막는 적치물, 휠체어·유모차 통행 방해" },
   { id: "other", label: "기타 생활 불편", description: "위 항목에 해당하지 않는 문제" },
 ] as const;
 
@@ -19,6 +20,8 @@ export const REPORT_CATEGORY_IDS = [
   "water",
   "signage",
   "other",
+  // Appended (stage 12): ids are stored, so new ones go at the end.
+  "accessibility",
 ] as const;
 
 export type ReportCategoryId = (typeof REPORT_CATEGORY_IDS)[number];
