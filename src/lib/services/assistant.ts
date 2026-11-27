@@ -42,6 +42,7 @@ const HEADLINE: Record<ReportCategoryId, string> = {
   waste: "쓰레기 무단투기 신고",
   water: "누수·배수 문제 신고",
   signage: "불법 광고물 신고",
+  accessibility: "보행 장애물 신고",
   other: "생활 불편 신고",
 };
 
@@ -65,6 +66,10 @@ const CATEGORY_EVIDENCE: Record<ReportCategoryId, string[]> = {
   signage: [
     "광고물 전체와 부착된 시설물이 함께 보이는 사진",
     "부착 위치를 알 수 있는 주변 배경",
+  ],
+  accessibility: [
+    "통행이 막힌 범위와 남은 통로 폭을 알 수 있는 사진",
+    "같은 장소에서 계속 반복되는지 여부",
   ],
   other: [
     "문제를 가장 명확하게 보여주는 사진",

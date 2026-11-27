@@ -378,4 +378,56 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 10,
+    name: "multimodal analysis provenance and applied draft",
+    up(db) {
+      db.exec(`
+        -- One row per citizen-initiated analysis attempt. A row is written for
+        -- both a completed model response and a deterministic fallback, so the
+        -- UI can always say which one it is showing. No API key, prompt text,
+        -- image bytes or provider error body is stored here.
+        CREATE TABLE report_analyses (
+          id                   TEXT PRIMARY KEY,
+          report_id            TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+          owner_id             TEXT NOT NULL REFERENCES users(id),
+          schema_version       TEXT NOT NULL,
+          prompt_version       TEXT NOT NULL,
+          status               TEXT NOT NULL CHECK (status IN ('completed','fallback')),
+          mode                 TEXT NOT NULL CHECK (mode IN ('live','mock','fallback')),
+          provider             TEXT,
+          model                TEXT,
+          external_transfer    INTEGER NOT NULL DEFAULT 0,
+          simulated_observations INTEGER NOT NULL DEFAULT 0,
+          -- SHA-256 of the uploaded original, used only to recognise the three
+          -- shipped synthetic sample photos in simulation mode.
+          source_sha256        TEXT NOT NULL,
+          -- Stable hash of the inputs that produced this result. An identical
+          -- request reuses it instead of spending another provider call.
+          input_fingerprint    TEXT NOT NULL,
+          result_json          TEXT NOT NULL,
+          user_facts_json      TEXT NOT NULL DEFAULT '[]',
+          clarification_question TEXT,
+          clarification_answer TEXT,
+          failure_code         TEXT,
+          guardrail_rules      TEXT NOT NULL DEFAULT '[]',
+          guardrail_removed    INTEGER NOT NULL DEFAULT 0,
+          latency_ms           INTEGER,
+          input_tokens         INTEGER,
+          output_tokens        INTEGER,
+          applied_at           TEXT,
+          created_at           TEXT NOT NULL
+        );
+        CREATE INDEX report_analyses_report_idx
+          ON report_analyses(report_id, created_at DESC);
+        -- Durable budget accounting: live calls per owner/global per 24h.
+        CREATE INDEX report_analyses_usage_idx
+          ON report_analyses(mode, owner_id, created_at);
+
+        -- Which analysis produced the text currently in the draft, if any.
+        -- Deliberately not a foreign key: analyses are removable history.
+        ALTER TABLE reports ADD COLUMN applied_analysis_id TEXT;
+      `);
+    },
+  },
 ];

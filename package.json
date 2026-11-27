@@ -20,6 +20,7 @@
     "seed": "node scripts/seed.ts",
     "user:create": "node scripts/create-user.ts",
     "retention": "node scripts/retention.ts",
+    "ai:usage": "node scripts/ai-usage.ts",
     "db:reset": "node scripts/reset-db.ts",
     "e2e:install": "playwright install chromium",
     "e2e:libs": "bash scripts/setup-browser-libs.sh",

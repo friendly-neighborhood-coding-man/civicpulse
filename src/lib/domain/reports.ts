@@ -37,6 +37,8 @@ export type ReportRow = {
   published_at: string | null;
   privacy_reviewed_at: string | null;
   consent_version: string | null;
+  /** Set when an AI analysis (not the rule-based template) wrote the draft. */
+  applied_analysis_id: string | null;
   text_reviewed_at: string | null;
   text_review_version: string | null;
   text_findings: string;
@@ -82,6 +84,7 @@ export type OwnerReport = {
   removedAt: string | null;
   removalReason: string | null;
   assistant: { mode: string; generatedAt: string } | null;
+  appliedAnalysisId: string | null;
   missingEvidence: string[];
   suggestedSteps: string[];
   channelId: string | null;
@@ -128,6 +131,7 @@ export function toOwnerReport(row: ReportRow, media?: MediaRow): OwnerReport {
       row.assistant_mode && row.assistant_generated_at
         ? { mode: row.assistant_mode, generatedAt: row.assistant_generated_at }
         : null,
+    appliedAnalysisId: row.applied_analysis_id ?? null,
     missingEvidence: parseStringArray(row.missing_evidence),
     suggestedSteps: parseStringArray(row.suggested_steps),
     channelId: row.channel_id,

@@ -27,6 +27,13 @@ PACKAGES=(
   libxrender1 libxi6 libsm6 libice6 libxext6 libx11-xcb1 libxcb1
   libfontconfig1 libfreetype6 libexpat1 libxcb-dri3-0 libxcb-glx0
   libxcb-shm0 libxcb-sync1 libxcb-xfixes0
+  # GTK/glib stack and pango dependencies. Some sandbox images no longer ship
+  # libglib-2.0, which makes Chromium exit 127 before a page can open.
+  libglib2.0-0t64 libpcre2-8-0 libffi8 libmount1 libselinux1 libblkid1
+  libzstd1 liblzma5 libbz2-1.0 libgraphite2-3 libharfbuzz0b libthai0
+  libdatrie1 libpangoft2-1.0-0 libpangocairo-1.0-0
+  # Direct Chromium dependencies that a minimal image can also lack.
+  libx11-6 libxau6 libxdmcp6 libdbus-1-3
 )
 
 (cd "$WORK/debs" && "${APT[@]}" download "${PACKAGES[@]}")

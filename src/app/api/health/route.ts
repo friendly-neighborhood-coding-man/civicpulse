@@ -1,3 +1,4 @@
+import { describeAiConfig } from "@/lib/ai/config";
 import { getAuthMode } from "@/lib/auth/mode";
 import { getAssistantMode } from "@/lib/config";
 import { getDb, getSchemaVersion } from "@/lib/db/connection";
@@ -20,6 +21,9 @@ export async function GET() {
       status: "ok",
       schemaVersion: version,
       assistantMode: getAssistantMode(),
+      // Safe provider summary: mode, provider name, model and whether a key is
+      // present. Never the key itself.
+      ai: describeAiConfig(),
       authMode,
       // Derived from the configured provider, never hardcoded: a password
       // deployment must not describe itself as a demo.
