@@ -116,7 +116,10 @@ export default function NewReportForm({ areas, categories, ai }: Props) {
    * retry, edit, or publish without AI.
    */
   async function submitWithAi() {
-    if (ai.mode === "live" && !liveConsent) {
+    // Consent is only meaningful when an external transfer can actually happen.
+    // With live mode configured but no key, the server records a fallback and
+    // sends nothing, so demanding consent there would be misleading.
+    if (ai.mode === "live" && ai.configured && !liveConsent) {
       setError("사진과 설명을 외부 AI 서비스로 전송하려면 동의가 필요합니다.");
       return;
     }
@@ -301,20 +304,24 @@ export default function NewReportForm({ areas, categories, ai }: Props) {
 
         <div className="rounded-xl border border-line bg-surface-muted px-4 py-3 text-xs leading-relaxed text-ink-soft">
           <p className="font-medium text-ink">
-            {ai.mode === "live"
+            {ai.mode === "live" && ai.configured
               ? "AI로 정리하기를 누르면 사진과 설명이 외부 AI 서비스로 전송됩니다."
-              : "지금은 시뮬레이션 모드이며 사진은 외부로 전송되지 않습니다."}
+              : ai.mode === "live"
+                ? "서버에 AI 키가 없어 대체 초안이 만들어집니다."
+                : "지금은 시뮬레이션 모드이며 사진은 외부로 전송되지 않습니다."}
           </p>
           <p className="mt-1">
-            {ai.mode === "live"
+            {ai.mode === "live" && ai.configured
               ? `메타데이터를 제거하고 줄인 사진 사본만 ${ai.provider ?? "외부 AI 서비스"}${ai.model ? ` (${ai.model})` : ""}에 보냅니다. 원본 파일과 정확한 좌표는 보내지 않습니다.`
-              : "실제 언어 모델을 호출하지 않고 규칙 기반 초안을 만듭니다. 합성 샘플 사진에 한해 미리 작성된 관찰을 보여줍니다."}
+              : ai.mode === "live"
+                ? "분석을 실행하면 규칙 기반 대체 초안이 저장되고, 사진은 서버 밖으로 나가지 않습니다."
+                : "실제 언어 모델을 호출하지 않고 규칙 기반 초안을 만듭니다. 합성 샘플 사진에 한해 미리 작성된 관찰을 보여줍니다."}
           </p>
           <p className="mt-1">
             AI는 참고용이며 법적 판단이 아닙니다. 결과는 저장 전에 직접
             수정할 수 있고, 공개·접수는 별도 단계에서 본인이 결정합니다.
           </p>
-          {ai.mode === "live" ? (
+          {ai.mode === "live" && ai.configured ? (
             <label className="mt-2 flex items-start gap-2 text-[11px] text-ink-soft">
               <input
                 type="checkbox"

@@ -195,7 +195,9 @@ describe("analysis domain", () => {
     expect(analysis.provenance.mode).toBe("fallback");
     expect(analysis.provenance.externalTransfer).toBe(false);
     expect(analysis.result.observations).toEqual([]);
-    expect(analysis.result.uncertainties.join(" ")).toContain("AI 서비스가 설정되지 않았습니다");
+    expect(analysis.result.uncertainties.join(" ")).toContain(
+      "사진에서 확인된 내용은 정리되지 않았습니다",
+    );
 
     const reread = getOwnerReport(db, owner, report.public_id);
     expect(reread.state).toBe("draft");
