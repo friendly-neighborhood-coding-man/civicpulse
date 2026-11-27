@@ -16,8 +16,14 @@ Useful scripts:
 | Command | What it does |
 |---|---|
 | `npm run check` | typecheck + lint + Vitest |
-| `npm run e2e` | builds, then runs 14 Playwright tests against `next start` on port 3100 with a fresh `.local/e2e` |
+| `npm run e2e` | builds, then runs 21 Chromium tests (19 desktop + 2 phone-sized AI) against `next start` on port 3100 with a fresh `.local/e2e` |
+| `npm run e2e:password` | 4 password-mode Chromium tests on port 3200 |
+| `npm run e2e:fallback` | 1 Chromium test for live mode without a key, on port 3300 |
+| `npm run e2e:demo` | regenerates the synthetic screenshots under `docs/screenshots/` |
+| `npm run demo:ai` | fresh simulation-mode demo on port 3500 (no paid call) |
+| `npm run ai:usage` | aggregate AI counts/tokens and an **estimated** cost (no text) |
 | `npm run e2e:install` | installs Chromium once |
+| `npm run e2e:libs` | extracts Chromium's shared libraries/fonts (sandbox only) |
 | `node scripts/capture.mjs <url>` | screenshots of home, create, draft and public pages |
 | `node scripts/capture-community.mjs <url>` | moderator queue, public issue, feed |
 | `node scripts/capture-followup.mjs <url>` | follow-up draft and approved states |
@@ -33,7 +39,29 @@ Select a user in the header or the home page panel. There are no passwords.
 | `demo-hana` | 이하나 | citizen |
 | `demo-ops` | 데모 운영자 | moderator |
 
-## 3. Fifteen-minute walkthrough
+## 3. AI reporting walkthrough (5 minutes)
+
+Start with `npm run demo:ai` (fresh database, simulation mode, port 3500) or
+`npm run dev` (simulation is the default).
+
+1. Choose **김민지** in the header.
+2. **새 제보** → press the **보도 파손** sample → 구역 **서울 마포구** → landmark
+   `OO초등학교 후문` → description `여기 길이 깨져서 위험해요`.
+3. Point at the disclosure box: simulation mode, no external transfer, AI is
+   optional. Press **AI로 제보 정리하기**.
+4. On the private draft page, read the badge **시뮬레이션 · 모델 미호출** and the
+   panel sections: directly visible, AI interpretation (hedged), safety concerns,
+   unknowns, missing evidence, privacy review points. Read the one optional
+   clarification question and skip it.
+5. Press **이 초안을 편집기에 적용**, change the title, save. The provenance card
+   now says **시뮬레이션 · 적용됨** and the “내가 처음 쓴 설명” quote is unchanged.
+6. Continue into the existing privacy review and optional publication flow.
+
+Say plainly: the observations are pre-written by a human for the three shipped
+synthetic sample photos; **no model ran and nothing left the server**. The
+clarification question is optional. AI never publishes or files anything.
+
+## 4. Fifteen-minute walkthrough
 
 1. **Home** — read the scope card: real submission none, synthetic data, publication
    optional. Open “공개 제보 둘러보기”.
@@ -64,17 +92,23 @@ Select a user in the header or the home page panel. There are no passwords.
     “검토 완료로 표시”, then use “안전신문고에서 직접 제출 ↗”. Say plainly: the app does
     not submit anything; the citizen does.
 
-## 4. What not to claim while demoing
+## 5. What not to claim while demoing
 
 - No automatic face/plate detection. Manual masking is the product; the optional browser
   `FaceDetector` is experimental and was not available in the test environment.
-- No AI model. Drafts and follow-ups are deterministic templates (`assistant_mode=mock`).
+- The default assistant is a **simulation**, not a live model. The badge says so;
+  observations exist only for the three synthetic samples. A live adapter exists but
+  `LIVE_MODEL_NOT_VERIFIED` — no real provider call has succeeded in this repository.
+- AI cannot determine legal violations, jurisdiction, responsibility or whether an
+  official complaint is sufficient. It does not choose an address, agency or contact.
+- AI privacy warnings are advisory. Their absence does not mean a photo is safe.
+- Deterministic drafts and follow-ups are still templates (`assistant_mode=mock`).
 - No submission, no email, no SMS, no Toss SDK, no deployed production service.
 - Support counts are demo accounts, not residents; official statuses only exist because a
   moderator typed them with a source.
 - Evidence photos are moderated by a human; there is no automatic evidence redaction.
 
-## 5. Failure checks worth showing
+## 6. Failure checks worth showing
 
 - Try publishing without ticking the acknowledgements → refused.
 - Try publishing with zero masks and no “nothing sensitive” confirmation → refused.
@@ -82,3 +116,21 @@ Select a user in the header or the home page panel. There are no passwords.
 - Open `/moderation` as a citizen → access denied.
 - Try `POST /api/public/reports/<id>/support` with a foreign `Origin` → 403.
 - Create a follow-up with no new approved evidence → refused with reasons.
+- Start with `CIVICPULSE_AI_MODE=openai` and an empty `OPENAI_API_KEY` (or run
+  `npm run e2e:fallback`): the form says the key is missing and the panel shows
+  **AI 사용 불가 · 대체 초안** with no observations. Nothing was sent and nothing is
+  labelled as a model result.
+
+## 7. Screenshots (synthetic, simulation)
+
+Generated by `npm run e2e:demo` from the shipped sample illustration and demo
+identities. They show the simulation badge; they are **not** evidence of live
+inference.
+
+| File | What it shows |
+|---|---|
+| `docs/screenshots/ai-01-input-mobile.png` | phone-sized new-report form, sample photo, disclosure |
+| `docs/screenshots/ai-02-analysis-mobile.png` | simulation badge, provenance, category and observations |
+| `docs/screenshots/ai-05-draft-preview-mobile.png` | draft preview, apply button, optional clarification |
+| `docs/screenshots/ai-03-draft-mobile.png` | applied draft in the editor |
+| `docs/screenshots/ai-04-analysis-desktop.png` | desktop panel and provenance |

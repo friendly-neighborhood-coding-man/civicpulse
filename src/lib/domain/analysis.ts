@@ -231,7 +231,7 @@ export function getAppliedAnalysis(
 }
 
 /** Deterministic draft used when no model result is usable. */
-function fallbackResult(report: ReportRow, code: FailureCode): AnalysisResult {
+function fallbackResult(report: ReportRow): AnalysisResult {
   const category: ReportCategoryId = isCategory(report.category) ? report.category : "other";
   const assistant = generateDraft({
     userDescription: report.user_description,
@@ -444,7 +444,7 @@ export async function requestAnalysis(
   }
 
   if (!provider) {
-    const result = fallbackResult(report, "missing_credentials");
+    const result = fallbackResult(report);
     return {
       reused: false,
       analysis: persistAnalysis(db, {
@@ -508,7 +508,7 @@ export async function requestAnalysis(
   }
 
   const fallback = (code: FailureCode, rules: string[] = [], removed = 0) => {
-    const result = fallbackResult(report, code);
+    const result = fallbackResult(report);
     return {
       reused: false,
       analysis: persistAnalysis(db, {

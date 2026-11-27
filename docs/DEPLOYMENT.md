@@ -110,3 +110,32 @@ and check `/api/health` reports the expected schema version.
 - No TLS termination inside the app; run it behind a proxy.
 - Toss deployment requires app registration and Toss login credentials. See
   [TOSS.md](TOSS.md); this is **BLOCKED**, not implemented.
+
+## Multimodal AI (stages 12–14)
+
+- Default `CIVICPULSE_AI_MODE=mock`: no network, no cost, no key. The panel labels it
+  `시뮬레이션 · 모델 미호출`; observations exist only for the three shipped samples.
+- Live mode requires `CIVICPULSE_AI_MODE=openai` **and** a server-side
+  `OPENAI_API_KEY`. The key is never sent to the browser, logged, or returned by
+  `/api/health` (which reports only mode, provider, model and `configured`).
+- If live mode is selected without a key, the server records an explicit
+  `missing_credentials` fallback. It does **not** run the simulation and label it as a
+  model result.
+- Default model `gpt-5-mini`; its official page lists image input, structured outputs
+  and the Responses endpoint, and marks the snapshot deprecated. Set
+  `CIVICPULSE_AI_MODEL` to a current vision model before a paid run.
+- Every call sends one ≤512 px, metadata-free JPEG copy plus the citizen's text and the
+  district label. Original files, precise coordinates, the landmark and account
+  identifiers are not sent.
+- Bounds: `CIVICPULSE_AI_TIMEOUT_MS` (25 s), `CIVICPULSE_AI_MAX_OUTPUT_TOKENS` (2 500),
+  `CIVICPULSE_AI_DAILY_LIMIT` (100), `CIVICPULSE_AI_USER_DAILY_LIMIT` (10),
+  `CIVICPULSE_AI_PER_REPORT_LIMIT` (5). A zero daily limit disables live calls.
+- Data: `report_analyses` stores the validated result, provenance, failure code,
+  guardrail counts and token counts — never the API key, prompt, image bytes or provider
+  error body. `npm run ai:usage` prints aggregate counts and an **estimate** only.
+- Provider retention/training/residency is unknown. `store: false` is not a
+  zero-retention guarantee, and no such claim is made in the UI or docs.
+- **No live call has been verified.** See [AI.md](AI.md) for the operator smoke test
+  and the remaining cost/retention caveats.
+- If the analysis service is unavailable, the private draft remains usable; the panel
+  shows a labelled fallback with a fixed reason and offers a retry.
